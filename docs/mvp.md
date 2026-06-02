@@ -1,159 +1,158 @@
 # Squelch – MVP Definition
-**Version:** 0.2  
-**Status:** Konzeptionsphase  
-**Datum:** 2026-06-02
+**Version:** 0.2
+**Status:** Concept phase
+**Date:** 2026-06-02
 
 ---
 
 ## 1. Vision
 
-Squelch ist eine Open-Source Desktop-App für Gaming-Squads die strukturierte Sprachkommunikation ohne Channel-Wechsel ermöglicht. Inspiriert von militärischen Funknetzen und dem Kommunikationsmodell des Spiels *Squad*: das eigene Duo hört sich permanent, Squad-Leader koordinieren sich per PTT im Leader-Net. Kein Discord-Channel-Wechsel, keine Unterbrechung des Spielflusses.
+Squelch is an open-source desktop app for gaming squads that enables structured voice communication without channel switching. Inspired by military radio nets and the communication model of the game *Squad*: your duo hears each other permanently, squad leaders coordinate via PTT on the Leader Net. No Discord channel switching, no interruption of gameplay.
 
 ---
 
-## 2. Zielgruppe
+## 2. Target Audience
 
-**Primär (MVP):** 4-köpfige Gaming-Squads mit zwei Duos (z.B. Grayzone Warfare).  
-**Sekundär (Post-MVP):** Größere Gruppen mit 3+ Teams (z.B. Star Citizen Org-Operationen).  
-**Nicht adressiert im MVP:** Broadcast-Streaming, Aufnahmen, Mobile-Clients.
+**Primary (MVP):** 4-player gaming squads with two duos (e.g. Grayzone Warfare).
+**Secondary (post-MVP):** Larger groups with 3+ teams (e.g. Star Citizen org operations).
+**Out of scope for MVP:** Broadcast streaming, session recording, mobile clients.
 
 ---
 
-## 3. Kommunikationsmodell
+## 3. Communication Model
 
 ```
-Duo A (P1 + P2):   always-on, hören sich permanent
-Duo B (P3 + P4):   always-on, hören sich permanent
+Duo A (P1 + P2):   always-on, hear each other permanently
+Duo B (P3 + P4):   always-on, hear each other permanently
 
-Leader-Net:        P1 drückt PTT  →  P3 hört ihn  (und umgekehrt)
-                   Nur Leader, nicht alle Spieler
+Leader Net:        P1 presses PTT  →  P3 hears them  (and vice versa)
+                   Leaders only, not all players
 ```
 
-**Leader-Regeln:**
-- Erster Spieler im Squad ist automatisch Leader
-- Leadership per Klick in der App übertragbar
-- Ein Squad hat genau einen Leader pro Duo
+**Leader rules:**
+- First player in the squad is automatically the leader
+- Leadership is transferable via a single click in the app
+- Each duo has exactly one leader
 
 ---
 
-## 4. MVP-Umfang
+## 4. MVP Scope
 
 ### 4.1 Features (In Scope)
 
-#### Squad-Management
-- Squad erstellen via Matrix-Room
-- Squad beitreten via Einladungslink / Room-ID
-- Duo-Zuweisung (wer ist mit wem im Duo)
-- Leader-Zuweisung mit Transfer-Funktion
+#### Squad Management
+- Create a squad via Matrix room
+- Join a squad via invite link / room ID
+- Duo assignment (who is paired with whom)
+- Leader assignment with transfer functionality
 
-#### Audio-Kanäle
-- **Duo-Kanal:** always-on open mic zwischen den 2 Duo-Mitgliedern
-- **Leader-Net:** PTT-Taste sendet an alle anderen Leader gleichzeitig
-- Gleichzeitiges Mischen beider Kanäle ohne Artefakte
+#### Audio Channels
+- **Duo channel:** always-on open mic between the 2 duo members
+- **Leader Net:** PTT key broadcasts to all other leaders simultaneously
+- Simultaneous mixing of both channels without artifacts
 
-#### Audio-Stack
-- Mikrofon-Capture und Wiedergabe via cpal
-- WebRTC P2P Audio-Streams (Audio nie durch Server)
-- STUN/TURN für NAT-Traversal (Internet-Gaming)
-- Globaler PTT-Hotkey (auch wenn Spielfenster fokussiert)
-- Konfigurierbare PTT-Taste
+#### Audio Stack
+- Microphone capture and playback via cpal
+- WebRTC P2P audio streams (audio never passes through a server)
+- STUN/TURN for NAT traversal (internet gaming)
+- Global PTT hotkey (works even when the game window has focus)
+- Configurable PTT key
 
 #### Signaling
-- Matrix als Signaling- und Discovery-Backend
-- Matrix-Account erforderlich (bestehende Accounts nutzbar)
-- WebRTC Offer/Answer via Matrix-Events (MatrixRTC / MSC3401)
+- Matrix as signaling and discovery backend
+- Matrix account required (existing accounts usable)
+- WebRTC offer/answer via Matrix events (MatrixRTC / MSC3401)
 
 #### UI (minimal)
-- Squad-Setup: erstellen / beitreten
-- Mitgliederliste mit Duo-Zuordnung und Leader-Markierung
-- Leader-Transfer per Klick
-- PTT-Taste konfigurieren
-- Danach: Tray-Icon, App läuft im Hintergrund
+- Squad setup: create / join
+- Member list with duo assignment and leader indicator
+- Leader transfer via click
+- PTT key configuration
+- After setup: tray icon, app runs in background
 
-#### Plattformen
-- **Windows** (primär – Gaming-Hauptplattform)
-- **Linux** (sekundär)
-- macOS explizit **nicht** im MVP
+#### Platforms
+- **Windows** (primary — main gaming platform)
+- **Linux** (secondary)
+- macOS explicitly **not** in MVP
 
 ---
 
 ### 4.2 Features (Out of Scope – Post-MVP)
 
-- Mehr als 2 Duos / 3+ Teams (Star Citizen Skalierung)
-- Mobile App (iOS / Android)
-- Aufnahme und Wiedergabe von Sessions
-- Noise Suppression / Rauschunterdrückung (RNNoise o.ä.)
-- LAN-Modus / mDNS Discovery
-- Push-to-Talk per Joystick / HOTAS-Taste
-- Eigener TURN-Server
-- End-to-End-Verschlüsselung über Matrix-E2EE (WebRTC DTLS-SRTP ist ausreichend)
+- More than 2 duos / 3+ teams (Star Citizen scaling)
+- Mobile app (iOS / Android)
+- Session recording and playback
+- Noise suppression / noise cancellation (RNNoise etc.)
+- LAN mode / mDNS discovery
+- Push-to-talk via joystick / HOTAS button
+- Self-hosted TURN server
+- End-to-end encryption via Matrix E2EE (WebRTC DTLS-SRTP is sufficient)
 
 ---
 
-## 5. Technischer Stack (bestätigt)
+## 5. Technical Stack (confirmed)
 
-| Komponente | Technologie | Begründung |
-|---|---|---|
-| Sprache | **Rust** | Performance, Sicherheit, Teamkompetenz |
-| UI | **egui / eframe** | Reines Rust, kein WebView, minimal – passt zum Utility-Charakter |
-| Tray + Hotkey | **tray-icon + global-hotkey** | Rust-nativ, kein Tauri nötig |
-| Signaling | **Matrix** (matrix-rust-sdk) | Föderiert, kein eigener Server, Open Source |
-| Audio I/O | **cpal** | Cross-platform, Rust-nativ |
-| Audio P2P | **WebRTC** (str0m oder webrtc-rs, TBD via Spike) | P2P, DTLS-SRTP verschlüsselt |
-| NAT-Traversal | **STUN/TURN** | Standard WebRTC, öffentliche Server nutzbar |
-| Build | **Cargo Workspace** | Klare Crate-Grenzen, gute Testbarkeit |
-| Lizenz | **MIT** | Maximale Offenheit, Community-freundlich |
-
----
-
-## 6. Architektur-Prinzipien
-
-1. **Audio verlässt nie einen Drittserver** – nur P2P via WebRTC
-2. **Kein eigener Squelch-Server** – Matrix-Föderierung macht das überflüssig
-3. **Cargo Workspace von Anfang an** – klare Crate-Grenzen, gute Testbarkeit
-4. **Kein `.unwrap()` in Produktionscode** – `thiserror` / `anyhow`
-5. **Transparent dokumentiert** – jede Architekturentscheidung in `docs/adr/`
-6. **Reines Rust** – kein zweiter Tech-Stack, kein JavaScript
+| Component | Technology | Rationale |
+|-----------|-----------|-----------|
+| Language | **Rust** | Performance, safety, team expertise |
+| UI | **egui / eframe** | Pure Rust, no WebView, minimal — fits the utility character |
+| Tray + Hotkey | **tray-icon + global-hotkey** | Rust-native, no Tauri required |
+| Signaling | **Matrix** (matrix-rust-sdk) | Federated, no own server, open source |
+| Audio I/O | **cpal** | Cross-platform, Rust-native |
+| Audio P2P | **WebRTC** (str0m — validated in Spike 001) | P2P, DTLS-SRTP encrypted |
+| NAT Traversal | **STUN/TURN** | Standard WebRTC, public servers usable |
+| Build | **Cargo Workspace** | Clear crate boundaries, good testability |
+| License | **MIT** | Maximum openness, community-friendly |
 
 ---
 
-## 7. Geplante Crate-Struktur
+## 6. Architecture Principles
+
+1. **Audio never passes through a third-party server** — P2P via WebRTC only
+2. **No Squelch server infrastructure** — Matrix federation makes it unnecessary
+3. **Cargo workspace from day one** — clear crate boundaries, good testability
+4. **No `.unwrap()` in production code** — `thiserror` / `anyhow`
+5. **Transparently documented** — every architectural decision in `docs/adr/`
+6. **Pure Rust** — no second tech stack, no JavaScript
+
+---
+
+## 7. Planned Crate Structure
 
 ```
 squelch/
-├── squelch-core/       # Gemeinsame Typen, Config, Fehlertypen, Squad-Modell
-├── squelch-matrix/     # Matrix-Client, Signaling, Room-Management
-├── squelch-webrtc/     # WebRTC Peer-Verbindungen, Audio-Streams
-├── squelch-audio/      # Mikrofon-Capture, Mixer (Duo + Leader-Net), cpal
-└── squelch-app/        # Entry Point, egui UI, Tray-Icon, globaler PTT-Hotkey
+├── squelch-core/       # Shared types, config, error types, squad model
+├── squelch-matrix/     # Matrix client, signaling, room management
+├── squelch-webrtc/     # WebRTC peer connections, audio streams (str0m)
+├── squelch-audio/      # Microphone capture, mixer (duo + leader net), cpal
+└── squelch-app/        # Entry point, egui UI, tray icon, global PTT hotkey
 ```
 
 ---
 
-## 8. MVP-Erfolgskriterien
+## 8. MVP Success Criteria
 
-Das MVP gilt als abgeschlossen wenn folgende User Stories erfüllt sind:
+The MVP is complete when the following user stories are fulfilled:
 
-1. **Als Spieler** kann ich einen Squad erstellen und drei Freunde einladen – ohne Account-Registrierung bei Squelch.
-2. **Als Duo-Mitglied** höre ich meinen Teamkameraden permanent ohne eine Taste zu drücken.
-3. **Als Squad-Leader** kann ich alle anderen Leader gleichzeitig erreichen indem ich eine konfigurierbare Taste gedrückt halte – auch während das Spiel im Fokus ist.
-4. **Als normaler Spieler** habe ich keinen Zugang zum Leader-Net – Koordination bleibt bei den Leadern.
-5. **Als Mitwirkender** kann ich das Projekt verstehen und Änderungen nachvollziehen weil alle Entscheidungen in `docs/adr/` dokumentiert sind.
-
----
-
-## 9. Nicht-funktionale Anforderungen
-
-- **Latenz:** < 50ms Ende-zu-Ende Audio
-- **Startzeit:** < 3 Sekunden
-- **Speicherverbrauch:** < 100MB RAM im Leerlauf
-- **Keine Cloud-Abhängigkeit von Squelch** – Matrix-Server wird vom Nutzer gewählt
+1. **As a player** I can create a squad and invite three friends — without registering an account with Squelch.
+2. **As a duo member** I hear my teammate permanently without pressing any button.
+3. **As a squad leader** I can reach all other leaders simultaneously by holding a configurable key — even while the game has focus.
+4. **As a regular player** I have no access to the Leader Net — coordination stays with the leaders.
+5. **As a contributor** I can understand the project and trace decisions because everything is documented in `docs/adr/`.
 
 ---
 
-## 10. Offene Fragen (Spike-Phase)
+## 9. Non-Functional Requirements
 
-- [ ] **WebRTC-Crate:** str0m vs webrtc-rs – Reifegrad, API, Wartungsstatus (Spike 001)
-- [ ] **MatrixRTC:** Wie viel nimmt uns matrix-rust-sdk beim WebRTC-Signaling ab? (Spike 002)
-- [ ] **Audio-Mixing:** Gleichzeitiges Mischen von Duo-Kanal + Leader-Net ohne Artefakte (Spike 003)
-- [ ] **TURN-Server:** Welche öffentlichen TURN-Server sind für Gaming-Latenz geeignet?
+- **Latency:** < 50ms end-to-end audio
+- **Startup time:** < 3 seconds
+- **Memory usage:** < 100MB RAM at idle
+- **No Squelch cloud dependency** — Matrix server is chosen by the user
+
+---
+
+## 10. Open Questions (Spike Phase)
+
+- [ ] **MatrixRTC:** How much does matrix-rust-sdk handle for WebRTC signaling? (Spike 002)
+- [ ] **Audio mixing:** Simultaneous mixing of duo channel + leader net without artifacts (Spike 003)
+- [ ] **TURN server:** Which public TURN servers are suitable for gaming latency?

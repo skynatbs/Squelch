@@ -1,61 +1,61 @@
-# ADR-0005 – Kommunikationsmodell: Duo-Kanäle + Leader-Net
-**Datum:** 2026-06-02  
-**Status:** Angenommen  
-**Autor:** Christian / SetScallywag
+# ADR-0005 – Communication Model: Duo Channels + Leader Net
+**Date:** 2026-06-02
+**Status:** Accepted
+**Author:** Christian / SetScallywag
 
 ---
 
-## Kontext
+## Context
 
-Ein Squad von 4+ Spielern braucht strukturierte Kommunikation. Ein einziger offener Kanal für alle führt zu Chaos – Spieler reden durcheinander, kein Signal-Rausch-Verhältnis. Discord löst das durch manuelle Channel-Wechsel, was während des Spiels zu viel Reibung verursacht. Ein "Alle-PTT"-Knopf der jedem Spieler zur Verfügung steht löst das Problem ebenfalls nicht, da Gamers – anders als Militär – selten die nötige Funkkdisziplin mitbringen.
+A squad of 4+ players needs structured communication. A single open channel for everyone leads to chaos — players talk over each other, signal-to-noise ratio collapses. Discord solves this through manual channel switching, which causes too much friction during gameplay. An "all-PTT" button available to every player does not solve the problem either, since gamers — unlike military personnel — rarely maintain the necessary radio discipline.
 
-Das Spiel *Squad* (Offworld Industries) hat dieses Problem durch einen mehrstufigen Kanal-Ansatz überzeugend gelöst: lokaler Kanal, Squad-Kanal und ein Command-Net nur für Squad-Leader.
-
----
-
-## Entscheidung
-
-Squelch implementiert **zwei Kanal-Ebenen**:
-
-1. **Duo-Kanal (Team-Kanal):** Always-on open mic zwischen den 2 Spielern eines Duos. Kein Drücken, kein Denken.
-2. **Leader-Net:** PTT-Kanal exklusiv für Squad-Leader. Ein Leader drückt PTT und erreicht alle anderen Leader gleichzeitig. Normale Spieler haben keinen Zugang zum Leader-Net.
-
-**Leader-Zuweisung:** Der erste Spieler im Squad ist automatisch Leader. Leadership ist per Klick in der App an ein anderes Mitglied übertragbar.
+The game *Squad* (Offworld Industries) has solved this convincingly with a multi-tier channel approach: local channel, squad channel, and a command net for squad leaders only.
 
 ---
 
-## Begründung
+## Decision
 
-Das Modell löst das Disziplin-Problem durch Mechanik statt durch Konvention: normale Spieler *können* gar nicht den Leader-Net belasten, unabhängig von ihrer Aufgeregtheit. Gleichzeitig bleibt die Kommunikation innerhalb des Duos natürlich und friktionslos. Das Leader-Net skaliert elegant: bei 3 Teams (Star Citizen) sprechen Leader A, B und C per PTT miteinander ohne dass die 6 anderen Spieler betroffen sind.
+Squelch implements **two channel tiers**:
 
----
+1. **Duo Channel (Team Channel):** Always-on open mic between the 2 players of a duo. No button, no thought required.
+2. **Leader Net:** PTT channel exclusive to squad leaders. A leader presses PTT and reaches all other leaders simultaneously. Regular players have no access to the Leader Net.
 
-## Betrachtete Alternativen
-
-| Option | Warum verworfen |
-|---|---|
-| Alle-PTT für jeden Spieler | Fehlende Spieler-Disziplin macht das chaotisch |
-| Nur Team-Kanäle, kein übergreifender Kanal | Leader können sich nicht koordinieren |
-| Alle-PTT nur für Leader (broadcast) | Besser, aber einseitig – Leader-Net erlaubt Dialog |
-| Konfigurierbar durch Squad selbst | Zu viel Komplexität im MVP; sinnvolles Default reicht |
+**Leader assignment:** The first player in the squad is automatically the leader. Leadership can be transferred to another member with a single click in the app.
 
 ---
 
-## Konsequenzen
+## Rationale
 
-**Positiv:**
-- Disziplin ist strukturell erzwungen, nicht konventionsabhängig
-- Duo-Kanal ist immer aktiv – keine Taste, kein Aufwand
-- Leader-Net skaliert auf beliebig viele Teams (Star Citizen, größere Gruppen)
-- Klares mentales Modell: "Ich spreche mit meinem Duo ODER mit den anderen Leadern"
-
-**Negativ / Risiken:**
-- Jede Gruppe braucht mindestens einen zugewiesenen Leader
-- Ein vergessener Leader-Wechsel kann Koordination blockieren (Leadership-Transfer muss einfach sein)
+This model solves the discipline problem through mechanics rather than convention: regular players *cannot* burden the Leader Net regardless of their excitement level. At the same time, communication within the duo remains natural and frictionless. The Leader Net scales elegantly: with 3 teams (Star Citizen), leaders A, B, and C communicate via PTT without the 6 other players being affected.
 
 ---
 
-## Verwandte ADRs
+## Alternatives Considered
 
-- ADR-0001 – Cargo Workspace als Projektstruktur
-- ADR-0003 – Matrix als Signaling-Backend
+| Option | Why rejected |
+|--------|-------------|
+| All-PTT for every player | Lack of player discipline makes this chaotic |
+| Duo channels only, no cross-team channel | Leaders cannot coordinate |
+| All-PTT for leaders only (broadcast) | Better, but one-directional — Leader Net enables dialogue |
+| Configurable by squad | Too much complexity for MVP; a sensible default is sufficient |
+
+---
+
+## Consequences
+
+**Positive:**
+- Discipline is structurally enforced, not convention-dependent
+- Duo channel is always active — no button, no effort
+- Leader Net scales to any number of teams (Star Citizen, larger groups)
+- Clear mental model: "I talk to my duo OR to the other leaders"
+
+**Negative / Risks:**
+- Every group needs at least one assigned leader
+- A forgotten leader transfer can block coordination (transfer must be frictionless)
+
+---
+
+## Related ADRs
+
+- ADR-0001 – Cargo Workspace as Project Structure
+- ADR-0003 – Matrix as Signaling Backend

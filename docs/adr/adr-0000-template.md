@@ -1,47 +1,47 @@
-# ADR-0000 – Titel der Entscheidung
-**Datum:** YYYY-MM-DD  
-**Status:** Vorgeschlagen | Angenommen | Abgelehnt | Ersetzt durch ADR-XXXX  
-**Autor:** 
+# ADR-0000 – Title of the Decision
+**Date:** YYYY-MM-DD
+**Status:** Proposed | Accepted | Rejected | Superseded by ADR-XXXX
+**Author:**
 
 ---
 
-## Kontext
+## Context
 
-*Beschreibe die Situation die zu dieser Entscheidung geführt hat. Was war das Problem? Welche Randbedingungen galten? Warum musste eine Entscheidung getroffen werden?*
-
----
-
-## Entscheidung
-
-*Was wurde entschieden? Klar und direkt formuliert – ein Satz wenn möglich.*
+*Describe the situation that led to this decision. What was the problem? What constraints applied? Why did a decision need to be made?*
 
 ---
 
-## Begründung
+## Decision
 
-*Warum wurde genau diese Option gewählt? Was hat den Ausschlag gegeben?*
+*What was decided? State it clearly and directly — one sentence if possible.*
 
 ---
 
-## Betrachtete Alternativen
+## Rationale
 
-| Option | Warum verworfen |
-|---|---|
+*Why was this option chosen? What tipped the scales?*
+
+---
+
+## Alternatives Considered
+
+| Option | Why rejected |
+|--------|-------------|
 | Option A | ... |
 | Option B | ... |
 
 ---
 
-## Konsequenzen
+## Consequences
 
-**Positiv:**
+**Positive:**
 - ...
 
-**Negativ / Risiken:**
+**Negative / Risks:**
 - ...
 
 ---
 
-## Verwandte ADRs
+## Related ADRs
 
 - ADR-XXXX – ...

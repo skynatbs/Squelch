@@ -1,56 +1,56 @@
-# ADR-0003 – Matrix als Signaling-Backend
-**Datum:** 2026-06-02  
-**Status:** Angenommen  
-**Autor:** Christian / SetScallywag
+# ADR-0003 – Matrix as Signaling Backend
+**Date:** 2026-06-02
+**Status:** Accepted
+**Author:** Christian / SetScallywag
 
 ---
 
-## Kontext
+## Context
 
-Squelch benötigt einen Weg über den sich Spieler gegenseitig finden und WebRTC-Verbindungen aushandeln können (Signaling). Die Lösung muss über das Internet funktionieren, soll keine eigene Server-Infrastruktur von Squelch erfordern, und zum Open-Source-Ansatz des Projekts passen.
-
----
-
-## Entscheidung
-
-Squelch nutzt das **Matrix-Protokoll** (via `matrix-rust-sdk`) ausschließlich als Signaling- und Discovery-Layer. Audio-Daten fließen direkt zwischen Peers via WebRTC – nie durch einen Matrix-Server.
+Squelch needs a way for players to find each other and negotiate WebRTC connections (signaling). The solution must work over the internet, must not require Squelch to operate its own server infrastructure, and must fit the open-source character of the project.
 
 ---
 
-## Begründung
+## Decision
 
-Matrix ist föderiert: Nutzer können jeden öffentlichen Homeserver (z.B. matrix.org) nutzen oder einen eigenen betreiben. Das Projekt ist nicht abhängig von einer zentralen Squelch-Infrastruktur. Das Protokoll ist etabliert, gut dokumentiert, und `matrix-rust-sdk` ist production-ready. MatrixRTC (MSC3401) ist genau für WebRTC-Signaling über Matrix konzipiert.
-
----
-
-## Betrachtete Alternativen
-
-| Option | Warum verworfen |
-|---|---|
-| Eigener Axum-Signaling-Server | Erfordert permanente Squelch-Infrastruktur, Single Point of Failure |
-| WebRTC via LAN/mDNS | Kein Internet-Support, NAT-Probleme |
-| XMPP/Jingle | Kleineres Ökosystem, weniger aktive Rust-Bibliotheken |
-| Peer-ID via QR-Code / manuell | Zu viel Reibung für den Nutzer |
+Squelch uses the **Matrix protocol** (via `matrix-rust-sdk`) exclusively as a signaling and discovery layer. Audio data flows directly between peers via WebRTC — never through a Matrix server.
 
 ---
 
-## Konsequenzen
+## Rationale
 
-**Positiv:**
-- Keine eigene Server-Infrastruktur notwendig
-- Föderiert: kein Vendor Lock-in, kein Single Point of Failure
-- Nutzer können eigenen Homeserver betreiben
-- Audio-Daten verlassen nie den P2P-Kanal
-- Gut zu Matrix-Community vermarktbar
-
-**Negativ / Risiken:**
-- Matrix-Account erforderlich (geringe Hürde, aber vorhanden)
-- matrix-rust-sdk ist umfangreich – Lernaufwand
-- MatrixRTC noch relativ jung, API könnte sich ändern
+Matrix is federated: users can use any public homeserver (e.g. matrix.org) or run their own. The project is not dependent on any central Squelch infrastructure. The protocol is established, well-documented, and `matrix-rust-sdk` is production-ready. MatrixRTC (MSC3401) is designed exactly for WebRTC signaling over Matrix.
 
 ---
 
-## Verwandte ADRs
+## Alternatives Considered
 
-- ADR-0001 – Cargo Workspace als Projektstruktur
-- ADR-0004 – Open-Source-Lizenz
+| Option | Why rejected |
+|--------|-------------|
+| Custom Axum signaling server | Requires permanent Squelch infrastructure, single point of failure |
+| WebRTC via LAN/mDNS | No internet support, NAT traversal problems |
+| XMPP/Jingle | Smaller ecosystem, fewer active Rust libraries |
+| Manual peer ID exchange (QR code) | Too much friction for the user |
+
+---
+
+## Consequences
+
+**Positive:**
+- No Squelch server infrastructure required
+- Federated: no vendor lock-in, no single point of failure
+- Users can run their own homeserver
+- Audio data never leaves the P2P channel
+- Natural fit for the Matrix community
+
+**Negative / Risks:**
+- Matrix account required (low barrier, but present)
+- matrix-rust-sdk is a large dependency — learning curve
+- MatrixRTC still relatively new, API may evolve
+
+---
+
+## Related ADRs
+
+- ADR-0001 – Cargo Workspace as Project Structure
+- ADR-0004 – MIT License

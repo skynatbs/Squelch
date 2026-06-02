@@ -1,53 +1,53 @@
-# ADR-0001 – Cargo Workspace als Projektstruktur
-**Datum:** 2026-06-02  
-**Status:** Angenommen  
-**Autor:** Christian / SetScallywag
+# ADR-0001 – Cargo Workspace as Project Structure
+**Date:** 2026-06-02
+**Status:** Accepted
+**Author:** Christian / SetScallywag
 
 ---
 
-## Kontext
+## Context
 
-Squelch soll von Anfang an wartbar und für externe Mitwirkende verständlich sein. Eine monolithische `main.rs` würde Testbarkeit und Modularität von Beginn an erschweren. Die Erfahrung aus dem Torval-Projekt zeigt, dass ein Cargo Workspace klare API-Grenzen erzwingt und spätere Erweiterungen vereinfacht.
-
----
-
-## Entscheidung
-
-Squelch wird als **Cargo Workspace** mit mehreren eigenständigen Crates organisiert.
+A monolithic `main.rs` approach leads to poor testability and high refactoring cost as a project grows (lesson learned from a prior project). Squelch should enforce modularity from day one to remain approachable for external contributors.
 
 ---
 
-## Begründung
+## Decision
 
-Jeder Crate hat eine einzige Verantwortlichkeit und kann unabhängig getestet werden. Neue Funktionsbereiche (z.B. weitere Signaling-Backends) können als eigene Crates ergänzt werden ohne bestehenden Code anzufassen. Ein gemeinsames `Cargo.lock` stellt konsistente Abhängigkeitsversionen sicher.
-
----
-
-## Betrachtete Alternativen
-
-| Option | Warum verworfen |
-|---|---|
-| Einzelnes Crate (Monolith) | Schlechte Testbarkeit, erschwert externe Beiträge |
-| Separate Repositories pro Crate | Zu viel Overhead für ein frühes Projekt |
+Squelch is organized as a **Cargo workspace** with multiple independent crates.
 
 ---
 
-## Konsequenzen
+## Rationale
 
-**Positiv:**
-- Klare Trennung von Verantwortlichkeiten
-- Einzelne Crates unabhängig testbar
-- Externe Mitwirkende finden sich schneller zurecht
-- Erweiterungen (neue Audio-Backends, neue Signaling-Backends) einfach ergänzbar
-
-**Negativ / Risiken:**
-- Initialer Setup-Aufwand höher als ein einzelnes `cargo new`
-- Abhängigkeiten zwischen Crates müssen explizit deklariert werden
+A workspace enforces clear API boundaries between crates. Each crate has a single responsibility and can be tested independently. New functional areas can be added as separate crates without touching existing code. A shared `Cargo.lock` ensures consistent dependency versions across all crates.
 
 ---
 
-## Verwandte ADRs
+## Alternatives Considered
 
-- ADR-0002 – Tauri v2 als Desktop-Shell
-- ADR-0003 – Matrix als Signaling-Backend
-- ADR-0004 – Open-Source-Lizenz
+| Option | Why rejected |
+|--------|-------------|
+| Single crate (monolith) | Poor testability, high refactoring cost |
+| Separate repositories per crate | Too much overhead for an early-stage project |
+
+---
+
+## Consequences
+
+**Positive:**
+- Clear separation of responsibilities
+- Individual crates testable in isolation (`cargo test -p squelch-audio`)
+- New crates (alternative backends, plugins) easy to add post-MVP
+- External contributors can navigate the codebase more easily
+
+**Negative / Risks:**
+- Higher initial setup cost compared to `cargo new`
+- Dependencies between crates must be declared explicitly
+
+---
+
+## Related ADRs
+
+- ADR-0002 – egui as UI Framework
+- ADR-0003 – Matrix as Signaling Backend
+- ADR-0004 – MIT License

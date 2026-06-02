@@ -1,59 +1,59 @@
-# ADR-0002 – egui als UI-Framework
-**Datum:** 2026-06-02  
-**Status:** Angenommen  
-**Autor:** Christian / SetScallywag
+# ADR-0002 – egui as UI Framework
+**Date:** 2026-06-02
+**Status:** Accepted
+**Author:** Christian / SetScallywag
 
 ---
 
-## Kontext
+## Context
 
-Squelch ist ein Utility-Tool. Der Nutzer interagiert mit der UI ausschließlich beim Start (Squad einrichten, Duo zuweisen, Leader setzen) und danach läuft die App im Hintergrund als Tray-Icon. Eine vollwertige WebView-basierte UI ist für diesen Use Case unverhältnismäßig aufwändig.
+Squelch is a utility tool. The user interacts with the UI only during setup (creating a squad, assigning duos, setting leaders) and then the app runs in the background as a tray icon. A full WebView-based UI stack is disproportionate for this use case.
 
-Tauri v2 mit Vue 3 wurde initial als Stack erwogen (bekannt aus Torval), aber Squelch hat einen anderen Charakter als Torval: kein dauerhaft sichtbares Editor-Interface, kein komplexes State-Management im Frontend, keine Rich-Text-Darstellung.
-
----
-
-## Entscheidung
-
-Squelch nutzt **egui / eframe** als UI-Framework – reines Rust, kein separater Frontend-Stack.
+Tauri v2 + Vue 3 was initially considered (familiar from another project in the same ecosystem), but Squelch has a fundamentally different character: no persistent visible editor interface, no complex frontend state management, no rich text rendering.
 
 ---
 
-## Begründung
+## Decision
 
-Der Lebenszyklus der App ist: kurzes Setup-Fenster → Tray-Icon → läuft im Hintergrund. Für diesen Zweck ist egui ideal: reines Rust ohne WebView-Overhead, einfaches Build-Setup, kleine Binary, kein zweiter Technologie-Stack (kein JavaScript/TypeScript/Vue). Die UI muss nicht poliert sein – sie muss funktional sein. Niemand bewundert einen Voice-Chat-Client, er soll einfach funktionieren.
-
-Globale Hotkeys funktionieren unter Linux und Windows ohne Tauri via `global-hotkey` crate (basiert auf `tao`), Tray-Icon via `tray-icon` crate.
+Squelch uses **egui / eframe** as its UI framework — pure Rust, no separate frontend stack.
 
 ---
 
-## Betrachtete Alternativen
+## Rationale
 
-| Option | Warum verworfen |
-|---|---|
-| Tauri v2 + Vue 3 | Überdimensioniert für ein reines Utility-Tool; zwei Tech-Stacks für minimale UI |
-| Iced | Weniger ausgereiftes Ökosystem als egui, API noch in Bewegung |
-| Keine UI (reines CLI-Tool) | Squad-Setup und Leader-Verwaltung brauchen minimale grafische Interaktion |
-| Native Widgets (gtk-rs / win32) | Plattformspezifisch, deutlich mehr Aufwand |
+The app lifecycle is: short setup window → tray icon → runs in background. For this purpose egui is ideal: pure Rust without WebView overhead, simple build setup, small binary, no second technology stack (no JavaScript/TypeScript/Vue). The UI does not need to be polished — it needs to be functional. Nobody admires a voice chat client; it just needs to work.
+
+Global hotkeys work on Linux and Windows without Tauri via the `global-hotkey` crate (based on `tao`); tray icon via the `tray-icon` crate.
 
 ---
 
-## Konsequenzen
+## Alternatives Considered
 
-**Positiv:**
-- Reines Rust – ein einziger Tech-Stack im gesamten Projekt
-- Kleine Binary, kein WebView-Overhead
-- Einfaches Build-Setup, keine Node.js-Abhängigkeit
-- egui ist immediate-mode – einfach zu verstehen für externe Mitwirkende
-
-**Negativ / Risiken:**
-- UI-Styling eingeschränkt gegenüber CSS/HTML
-- egui-Ökosystem kleiner als Web-Ökosystem
-- Tray-Icon und globaler Hotkey müssen separat über Crates eingebunden werden (kein Tauri-Plugin)
+| Option | Why rejected |
+|--------|-------------|
+| Tauri v2 + Vue 3 | Overengineered for a pure utility tool; two tech stacks for minimal UI |
+| Iced | Less mature ecosystem than egui, API still in flux |
+| No UI (pure CLI) | Squad setup and leader management require minimal graphical interaction |
+| Native widgets (gtk-rs / win32) | Platform-specific, significantly more effort |
 
 ---
 
-## Verwandte ADRs
+## Consequences
 
-- ADR-0001 – Cargo Workspace als Projektstruktur
-- ADR-0005 – Kommunikationsmodell
+**Positive:**
+- Pure Rust — one single tech stack across the entire project
+- Small binary, no WebView overhead
+- Simple build setup, no Node.js dependency
+- egui is immediate-mode — easy to understand for external contributors
+
+**Negative / Risks:**
+- UI styling more limited compared to CSS/HTML
+- egui ecosystem smaller than the web ecosystem
+- Tray icon and global hotkey must be wired up separately (no Tauri plugin)
+
+---
+
+## Related ADRs
+
+- ADR-0001 – Cargo Workspace as Project Structure
+- ADR-0005 – Communication Model

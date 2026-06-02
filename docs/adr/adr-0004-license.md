@@ -1,52 +1,52 @@
-# ADR-0004 – Open-Source-Lizenz (MIT)
-**Datum:** 2026-06-02  
-**Status:** Vorgeschlagen  
-**Autor:** Christian / SetScallywag
+# ADR-0004 – MIT License
+**Date:** 2026-06-02
+**Status:** Proposed
+**Author:** Christian / SetScallywag
 
 ---
 
-## Kontext
+## Context
 
-Squelch soll als Open-Source-Projekt veröffentlicht werden. Die Lizenzwahl beeinflusst welche Abhängigkeiten genutzt werden dürfen, wie die Community beitragen kann, und ob kommerzielle Nutzung erlaubt ist.
-
----
-
-## Entscheidung
-
-Squelch wird unter der **MIT-Lizenz** veröffentlicht.
+Squelch is to be released as an open-source project. The license choice affects which dependencies may be used, how the community can contribute, and whether commercial use is permitted.
 
 ---
 
-## Begründung
+## Decision
 
-MIT ist die permissivste und am weitesten verbreitete Open-Source-Lizenz im Rust-Ökosystem. Sie erlaubt uneingeschränkte Nutzung, Modifikation und Weitergabe – auch in kommerziellen Kontexten. Das maximiert die potenzielle Nutzerbasis und senkt die Hürde für externe Beiträge. Alle geplanten Abhängigkeiten (matrix-rust-sdk: Apache-2.0, Tauri: MIT/Apache-2.0, WebRTC-Crates: MIT) sind mit MIT kompatibel.
-
----
-
-## Betrachtete Alternativen
-
-| Option | Warum verworfen |
-|---|---|
-| Apache-2.0 | Ebenfalls permissiv, aber komplexer – MIT reicht für diesen Use Case |
-| GPL-3.0 | Copyleft erzwingt Open Source bei Derivaten – schränkt kommerzielle Nutzung ein |
-| AGPL-3.0 | Zu restriktiv für eine App die auch in kommerziellen Gaming-Kontexten genutzt wird |
-| Proprietär | Widerspricht dem Community-Gedanken des Projekts |
+Squelch is released under the **MIT License**.
 
 ---
 
-## Konsequenzen
+## Rationale
 
-**Positiv:**
-- Maximale Offenheit für Nutzer und Mitwirkende
-- Kompatibel mit allen geplanten Abhängigkeiten
-- Einfach verständlich, keine Compliance-Komplexität
-
-**Negativ / Risiken:**
-- Niemand ist verpflichtet Verbesserungen zurückzugeben
-- Kommerzielle Nutzung ohne Gegenleistung möglich (bewusst akzeptiert)
+MIT is the most permissive and most widely used open-source license in the Rust ecosystem. It allows unrestricted use, modification, and redistribution — including in commercial contexts. This maximizes the potential user base and lowers the barrier for external contributions. All planned dependencies (matrix-rust-sdk: Apache-2.0, egui: MIT, str0m: MIT) are compatible with MIT.
 
 ---
 
-## Verwandte ADRs
+## Alternatives Considered
 
-- ADR-0003 – Matrix als Signaling-Backend
+| Option | Why rejected |
+|--------|-------------|
+| Apache-2.0 | Also permissive, but more complex — MIT is sufficient for this use case |
+| GPL-3.0 | Copyleft forces open source on derivatives — restricts commercial use |
+| AGPL-3.0 | Too restrictive for an app used in commercial gaming contexts |
+| Proprietary | Contradicts the community-driven nature of the project |
+
+---
+
+## Consequences
+
+**Positive:**
+- Maximum openness for users and contributors
+- Compatible with all planned dependencies
+- Simple to understand, no compliance complexity
+
+**Negative / Risks:**
+- No obligation to contribute improvements back
+- Commercial use without reciprocation is possible (consciously accepted)
+
+---
+
+## Related ADRs
+
+- ADR-0003 – Matrix as Signaling Backend
