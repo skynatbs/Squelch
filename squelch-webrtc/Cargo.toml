@@ -1,0 +1,16 @@
+[package]
+name = "squelch-webrtc"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "WebRTC peer connections and audio streams for Squelch, powered by str0m."
+
+[dependencies]
+squelch-core   = { path = "../squelch-core" }
+squelch-matrix = { path = "../squelch-matrix" }
+thiserror      = { workspace = true }
+anyhow         = { workspace = true }
+serde          = { workspace = true }
+tokio          = { workspace = true }
+tracing        = { workspace = true }
+str0m          = { workspace = true }

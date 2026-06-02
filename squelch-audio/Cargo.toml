@@ -1,0 +1,14 @@
+[package]
+name = "squelch-audio"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Microphone capture, mixing, and playback for Squelch, powered by cpal."
+
+[dependencies]
+squelch-core = { path = "../squelch-core" }
+thiserror    = { workspace = true }
+anyhow       = { workspace = true }
+tracing      = { workspace = true }
+cpal         = { workspace = true }
+ringbuf      = { workspace = true }
