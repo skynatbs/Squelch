@@ -1,0 +1,18 @@
+/target
+Cargo.lock
+.env
+.env.*
+*.rs.bk
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Spikes sind throwaway - aber wir versionieren sie bewusst für Nachvollziehbarkeit
+# (kein Ausschluss von spikes/)
