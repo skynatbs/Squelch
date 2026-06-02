@@ -1,0 +1,12 @@
+[package]
+name = "spike-str0m"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "spike-str0m"
+path = "src/main.rs"
+
+[dependencies]
+str0m = "0.20"
+anyhow = "1"
