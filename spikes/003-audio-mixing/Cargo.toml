@@ -1,0 +1,13 @@
+[package]
+name = "spike-audio-mixing"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "spike-audio-mixing"
+path = "src/main.rs"
+
+[dependencies]
+cpal = "0.15"
+anyhow = "1"
+ringbuf = "0.3"
