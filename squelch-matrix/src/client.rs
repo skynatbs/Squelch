@@ -204,6 +204,35 @@ impl MatrixClient {
         .await
     }
 
+    /// Send a disband event to a remote member (leader-only action).
+    ///
+    /// The receiving client will leave the room and clear its local config
+    /// after validating that the sender is the current squad leader.
+    pub async fn send_disband(
+        &self,
+        target_user: &OwnedUserId,
+        target_device: &OwnedDeviceId,
+        room_id: &OwnedRoomId,
+    ) -> Result<(), MatrixError> {
+        let content = serde_json::json!({
+            "room_id": room_id.as_str(),
+            "reason":  "leader_initiated",
+        });
+        self.send_to_device(target_user, target_device, event_types::DISBAND, content)
+            .await
+    }
+
+    /// Leave a Matrix room.
+    pub async fn leave_room(&self, room_id: &OwnedRoomId) -> Result<(), MatrixError> {
+        if let Some(room) = self.inner.get_room(room_id) {
+            room.leave()
+                .await
+                .map_err(|e| MatrixError::Room(e.to_string()))?;
+            info!(%room_id, "left squad room");
+        }
+        Ok(())
+    }
+
     // ── Sync loop ─────────────────────────────────────────────────────────
 
     /// Spawn the background sync task.
@@ -273,6 +302,17 @@ impl MatrixClient {
                                                 payload: p,
                                             },
                                         )
+                                    }
+                                    event_types::DISBAND => {
+                                        let room_id = content
+                                            .get("room_id")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("")
+                                            .to_owned();
+                                        Some(SignalingEvent::Disband {
+                                            from: sender,
+                                            room_id,
+                                        })
                                     }
                                     _ => {
                                         debug!(ev_type, "unknown to-device event, ignoring");

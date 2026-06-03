@@ -44,6 +44,9 @@ pub enum SignalingEvent {
     SdpAnswer { from: String, payload: SdpMessage },
     /// Remote peer sent an ICE candidate.
     IceCandidate { from: String, payload: IceCandidate },
+    /// Squad leader initiated a disband — all clients should leave the room.
+    /// The app must validate that `from` is the current leader before acting.
+    Disband { from: String, room_id: String },
 }
 
 #[cfg(test)]
