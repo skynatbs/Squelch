@@ -1,20 +1,28 @@
 //! squelch-webrtc — WebRTC peer connections and audio streams.
 //!
 //! Responsibilities:
-//! - One `Rtc` instance (str0m) per remote peer
-//! - SDP offer/answer negotiation (coordinated via squelch-matrix signaling)
+//! - One [`PeerConnection`] (wrapping str0m's `Rtc`) per remote peer
+//! - SDP offer/answer negotiation via squelch-matrix signaling
 //! - ICE + DTLS handshake (str0m handles internally)
-//! - Sending encoded audio frames (Opus) to remote peers
-//! - Receiving audio frames from remote peers → forwarding to squelch-audio
-//!
-//! This crate owns the str0m run loop (one thread per peer connection).
-//! It communicates with squelch-audio via channels (encoded audio in/out).
+//! - Sending encoded audio frames (Opus f32 PCM → writer) to remote peers
+//! - Receiving decoded audio frames from remote peers → channel to squelch-audio
 //!
 //! # Mesh topology
 //!
-//! For a 4-player squad (2 duos):
-//!   Each player maintains 3 `PeerConnection` instances (one per remote peer).
-//!   Channels: duo partner (always-on) + 2 others (leader-net gated).
+//! For a 4-player squad (2 duos), each player maintains 3 [`PeerConnection`]s:
+//!
+//! ```text
+//!   Self ──── duo_partner  (always-on audio)
+//!        ├─── other_leader (leader-net, PTT-gated)
+//!        └─── other_member (leader-net, PTT-gated)
+//! ```
+//!
+//! The [`PeerMesh`] manages all connections for one local player.
 
+pub mod error;
 pub mod peer;
 pub mod mesh;
+
+pub use error::WebRtcError;
+pub use peer::{PeerConnection, PeerRole};
+pub use mesh::PeerMesh;
