@@ -61,15 +61,31 @@ commit message:
     git add -A
     git commit -m "{{message}}"
 
-# Push current branch
+# Push current branch (reads GITHUB_TOKEN from .env)
 push:
-    git push
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -f .env ]; then source .env; fi
+    TOKEN="${GITHUB_TOKEN:-}"
+    if [ -n "$TOKEN" ]; then
+        git push https://$TOKEN@github.com/skynatbs/Squelch.git HEAD
+    else
+        git push
+    fi
 
 # Stage, commit, and push in one step
 ship message:
+    #!/usr/bin/env bash
+    set -euo pipefail
     git add -A
     git commit -m "{{message}}"
-    git push
+    if [ -f .env ]; then source .env; fi
+    TOKEN="${GITHUB_TOKEN:-}"
+    if [ -n "$TOKEN" ]; then
+        git push https://$TOKEN@github.com/skynatbs/Squelch.git HEAD
+    else
+        git push
+    fi
 
 # Show compact log
 log:
