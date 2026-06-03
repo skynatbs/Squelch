@@ -14,8 +14,15 @@ fn main() -> Result<()> {
     // ── Logging ───────────────────────────────────────────────────────────
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("squelch=info,warn")),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                EnvFilter::new(
+                    "squelch=info,squelch_matrix=info,squelch_webrtc=info,\
+                     squelch_audio=info,\
+                     matrix_sdk_crypto::backups=off,\
+                     matrix_sdk_crypto::identities=off,\
+                     warn",
+                )
+            }),
         )
         .init();
 
