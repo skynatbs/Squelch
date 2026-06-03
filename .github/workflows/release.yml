@@ -13,6 +13,8 @@ jobs:
   build-windows:
     name: Windows x86_64 (.exe)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
