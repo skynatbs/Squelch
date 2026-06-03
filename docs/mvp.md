@@ -22,17 +22,29 @@ Squelch is an open-source desktop app for gaming squads that enables structured 
 ## 3. Communication Model
 
 ```
-Duo A (P1 + P2):   always-on, hear each other permanently
-Duo B (P3 + P4):   always-on, hear each other permanently
+Within a squad:   N:N open mic — all members hear each other permanently
+                  Works for any squad size (2–8+ players)
 
-Leader Net:        P1 presses PTT  →  P3 hears them  (and vice versa)
-                   Leaders only, not all players
+Between leaders:  Leader Net — PTT, all squad leaders simultaneously
+```
+
+### Concrete example (Star Citizen operation)
+
+```
+Squad "Support"    (2):  alice, bob                          [open mic]
+Squad "Fighter"    (6):  carol, dave, eve, frank, grace, heidi [open mic]
+Squad "Dropships"  (2):  ivan, julia                         [open mic]
+Squad "Ground-1"   (4):  kevin, linda, mike, nancy            [open mic]
+Squad "Ground-2"   (4):  oscar, patricia, quinn, roger        [open mic]
+Squad "Ground-3"   (4):  sarah, thomas, uma, victor           [open mic]
+
+Leader Net (PTT):        alice, carol, ivan, kevin, oscar, sarah
 ```
 
 **Leader rules:**
-- First player in the squad is automatically the leader
+- First player to create the squad is automatically its leader
 - Leadership is transferable via a single click in the app
-- Each duo has exactly one leader
+- Only the current leader can initiate squad disband (ADR-0006)
 
 ---
 
@@ -40,39 +52,38 @@ Leader Net:        P1 presses PTT  →  P3 hears them  (and vice versa)
 
 ### 4.1 Features (In Scope)
 
-#### Squad Management
-- Create a squad via Matrix room
-- Join a squad via invite link / room ID
-- Duo assignment (who is paired with whom)
-- Leader assignment with transfer functionality
+#### Team & Squad Management
+- Create a team room (one Matrix room for the entire operation)
+- Create named squads within the team room
+- Join an existing team room via room ID
+- Team overview: all squads, all members, online status, leader indicator
+- Leader assignment with transfer functionality (per squad)
+- Squad disband by leader (ADR-0006)
 
 #### Audio Channels
-- **Duo channel:** always-on open mic between the 2 duo members
-- **Leader Net:** PTT key broadcasts to all other leaders simultaneously
-- Simultaneous mixing of both channels without artifacts
+- **Squad open mic:** always-on N:N audio between all members of the same squad
+  (any squad size — 2 to 8+ players)
+- **Leader Net:** PTT key broadcasts to all other squad leaders simultaneously
+- Simultaneous mixing of squad open mic + incoming leader net without artifacts
 
 #### Audio Stack
 - Microphone capture and playback via cpal
-- WebRTC P2P audio streams (audio never passes through a server)
+- WebRTC P2P audio streams — audio never passes through a server
+- Opus encode/decode (48kHz, 24kbps voice)
+- Resampling from device rate to 48kHz (linear, sufficient for voice)
 - STUN/TURN for NAT traversal (internet gaming)
 - Global PTT hotkey (works even when the game window has focus)
-- Configurable PTT key
+- Configurable PTT key (saved to `~/.config/squelch/config.toml`)
 
 #### Signaling
 - Matrix as signaling and discovery backend
-- Matrix account required (existing accounts usable)
-- WebRTC offer/answer via Matrix events (MatrixRTC / MSC3401)
-
-#### UI (minimal)
-- Squad setup: create / join
-- Member list with duo assignment and leader indicator
-- Leader transfer via click
-- PTT key configuration
-- After setup: tray icon, app runs in background
+- Matrix account required (any homeserver — matrix.org, self-hosted, etc.)
+- WebRTC offer/answer + ICE via Matrix to-device events (`io.squelch.*`)
+- Disband protocol via `io.squelch.disband` (ADR-0006)
 
 #### Platforms
-- **Windows** (primary — main gaming platform)
-- **Linux** (secondary)
+- **Windows** (primary — main gaming platform for most players)
+- **Linux** (secondary — development platform)
 - macOS explicitly **not** in MVP
 
 ---
@@ -130,15 +141,22 @@ squelch/
 
 ---
 
-## 8. MVP Success Criteria
+## 7. MVP Success Criteria
 
 The MVP is complete when the following user stories are fulfilled:
 
-1. **As a player** I can create a squad and invite three friends — without registering an account with Squelch.
-2. **As a duo member** I hear my teammate permanently without pressing any button.
-3. **As a squad leader** I can reach all other leaders simultaneously by holding a configurable key — even while the game has focus.
-4. **As a regular player** I have no access to the Leader Net — coordination stays with the leaders.
-5. **As a contributor** I can understand the project and trace decisions because everything is documented in `docs/adr/`.
+1. **As a player** I can create a team room and invite others — without registering
+   an account with Squelch (any Matrix account works).
+2. **As a squad member** I hear all my squad mates permanently without pressing
+   any button, regardless of squad size (2–8 players).
+3. **As a squad leader** I can reach all other squad leaders simultaneously by
+   holding a configurable key — even while the game has focus.
+4. **As any player** I see a team overview: all squads, their members, and who
+   the leaders are — so everyone knows squad composition at a glance.
+5. **As a regular player** I have no access to the Leader Net — coordination stays
+   with the leaders.
+6. **As a contributor** I can understand the project and trace decisions because
+   everything is documented in `docs/adr/`.
 
 ---
 

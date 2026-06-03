@@ -450,18 +450,25 @@ All architectural decisions are documented in `docs/adr/`:
 | 0002 | egui as UI framework | Accepted |
 | 0003 | Matrix as signaling backend | Accepted |
 | 0004 | MIT License | Proposed |
-| 0005 | Communication model: Duo channels + Leader Net | Accepted |
+| 0005 | Communication model: Duo channels + Leader Net | Partially superseded by ADR-0007 |
+| 0006 | Squad room lifecycle (persistent + disband protocol) | Accepted |
+| 0007 | Squad Open Mic replaces Duo Channel | Accepted |
 
 ---
 
 ## 9. What's Next
 
-| Phase | Crate | Status |
-|-------|-------|--------|
+| Phase | Crate / Area | Status |
+|-------|-------------|--------|
 | Phase 1 | `squelch-matrix` — login, room, signaling | ✅ Done |
 | Phase 2 | `squelch-webrtc` — PeerConnection + PeerMesh | ✅ Done |
 | Phase 3 | `squelch-audio` — cpal pipeline + Opus | ✅ Done |
-| Phase 4 | `squelch-app` — egui UI + global hotkey | 🔲 Next |
-| Post-MVP | Star Citizen scaling (3+ teams) | 🔲 Planned |
+| Phase 4 | `squelch-app` — egui UI + global hotkey + wiring | ✅ Done |
+| Phase 5 | WebRTC peer mesh — connect players when they join the room | 🔲 Next |
+| Phase 5 | `squelch-core` — replace `Duo` with `Team`/`Squad` open mic model (ADR-0007) | 🔲 Next |
+| Phase 5 | Team Overview UI — all squads, all leaders, online status | 🔲 Next |
+| Phase 5 | Windows build + test | 🔲 Next |
+| Post-MVP | 3+ squads / Star Citizen scale (6+ squads, 20+ players) | 🔲 Planned |
 | Post-MVP | Noise suppression (RNNoise) | 🔲 Planned |
 | Post-MVP | E2EE signaling via Matrix E2EE | 🔲 Planned |
+| Post-MVP | Proper resampler (rubato) replacing linear resampling | 🔲 Planned |

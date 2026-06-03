@@ -1,7 +1,10 @@
 # ADR-0005 – Communication Model: Duo Channels + Leader Net
 **Date:** 2026-06-02
-**Status:** Accepted
+**Status:** Partially superseded by ADR-0007
 **Author:** Christian / SetScallywag
+
+> **Note:** The "Duo Channel" concept has been superseded by ADR-0007 (Squad Open Mic).
+> The Leader Net sections of this ADR remain valid and in effect.
 
 ---
 
