@@ -1,6 +1,6 @@
 [package]
 name = "squelch-app"
-version = "0.1.0"
+version = "0.1.0-alpha"
 edition = "2024"
 publish = false
 description = "Squelch desktop app — egui UI, tray icon, and global PTT hotkey."

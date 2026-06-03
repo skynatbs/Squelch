@@ -101,6 +101,22 @@ spike name:
 run-spike name:
     cargo run --manifest-path spikes/{{name}}/Cargo.toml
 
+# ── Release ────────────────────────────────────────────────────────────────
+
+# Tag setzen und pushen → löst den Windows-Release-Workflow aus
+# Verwendung: just tag v0.1.0-alpha
+tag version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git tag -a "{{version}}" -m "Release {{version}}"
+    if [ -f .env ]; then source .env; fi
+    TOKEN="${GITHUB_TOKEN:-}"
+    if [ -n "$TOKEN" ]; then
+        git push https://$TOKEN@github.com/skynatbs/Squelch.git "{{version}}"
+    else
+        git push origin "{{version}}"
+    fi
+
 # ── Misc ───────────────────────────────────────────────────────────────────
 
 # Show dependency tree

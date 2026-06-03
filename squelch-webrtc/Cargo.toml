@@ -1,6 +1,6 @@
 [package]
 name = "squelch-webrtc"
-version = "0.1.0"
+version = "0.1.0-alpha"
 edition = "2024"
 publish = false
 description = "WebRTC peer connections and audio streams for Squelch, powered by str0m."

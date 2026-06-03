@@ -1,0 +1,43 @@
+# git-cliff configuration for Squelch
+# https://git-cliff.org/docs/configuration
+
+[changelog]
+header = ""
+body = """
+{% if version %}\
+## {{ version }} — {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## Unreleased
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group }}
+{% for commit in commits %}\
+- {{ commit.message | upper_first | trim_end_matches(pat=".") }}\
+{% if commit.breaking %} ⚠ BREAKING{% endif %}
+
+{% endfor %}\
+{% endfor %}\
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+commit_parsers = [
+  { message = "^feat",     group = "Neu" },
+  { message = "^fix",      group = "Bugfixes" },
+  { message = "^refactor", group = "Refactoring" },
+  { message = "^test",     group = "Tests" },
+  { message = "^docs",     group = "Dokumentation" },
+  { message = "^chore",    skip = true },
+  { message = "^ci",       skip = true },
+  { message = "^spike",    skip = true },
+]
+filter_commits = true
+tag_pattern = "v[0-9].*"
+# Beim ersten Release gibt es keinen vorherigen Tag — alles seit Anfang nehmen
+ignore_tags = ""
+topo_order = false
+sort_commits = "newest"

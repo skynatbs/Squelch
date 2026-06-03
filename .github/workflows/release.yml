@@ -1,0 +1,108 @@
+name: Release
+
+# Ausgelöst wenn ein Tag "v*" gepusht wird, z.B. v0.1.0-alpha
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-windows:
+    name: Windows x86_64 (.exe)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # git-cliff braucht die volle History
+
+      # Rust-Toolchain mit Windows-Target installieren
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      # MinGW Cross-Compiler
+      - name: Install MinGW toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc-mingw-w64-x86-64 \
+            libopus-dev \
+            pkg-config \
+            autoconf automake libtool
+
+      # Opus statisch für Windows cross-compilieren
+      - name: Cross-build Opus (static)
+        run: |
+          OPUS_VER=1.5.2
+          curl -sSfL "https://downloads.xiph.org/releases/opus/opus-${OPUS_VER}.tar.gz" | tar xz
+          cd "opus-${OPUS_VER}"
+          ./configure \
+            --host=x86_64-w64-mingw32 \
+            --prefix="$HOME/.local/opus-win64" \
+            --enable-static \
+            --disable-shared \
+            --disable-doc \
+            --disable-extra-programs
+          make -j$(nproc)
+          make install
+
+      # Cargo config: Cross-Linker + Opus-Pfad
+      - name: Cargo cross config
+        run: |
+          mkdir -p .cargo
+          cat >> .cargo/config.toml <<'EOF'
+          [target.x86_64-pc-windows-gnu]
+          linker = "x86_64-w64-mingw32-gcc"
+          ar = "x86_64-w64-mingw32-ar"
+          EOF
+          echo "OPUS_STATIC=1" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH_x86_64_pc_windows_gnu=$HOME/.local/opus-win64/lib/pkgconfig" >> $GITHUB_ENV
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+
+      # Dependency-Cache
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-gnu
+
+      # Release-Build
+      - name: Build squelch.exe
+        run: |
+          cargo build \
+            --release \
+            --package squelch-app \
+            --target x86_64-pc-windows-gnu
+
+      - name: Rename artifact
+        run: |
+          cp target/x86_64-pc-windows-gnu/release/squelch.exe \
+             "squelch-${GITHUB_REF_NAME}-windows-x86_64.exe"
+
+      # git-cliff: Changelog aus Conventional Commits generieren
+      - name: Generate release notes (git-cliff)
+        uses: orhun/git-cliff-action@v3
+        id: cliff
+        with:
+          config: cliff.toml
+          args: --latest --strip all
+
+      # GitHub Release mit generierten Notes
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Squelch ${{ github.ref_name }}"
+          body: |
+            ${{ steps.cliff.outputs.content }}
+
+            ---
+            > Alpha-Version — ausschliesslich für interne Testzwecke.
+            > Einfach `.exe` starten, kein Installer nötig.
+            > Config landet unter `%APPDATA%\squelch\`.
+          files: squelch-${{ github.ref_name }}-windows-x86_64.exe
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
