@@ -233,6 +233,17 @@ impl MatrixClient {
         Ok(())
     }
 
+    /// Log out from the Matrix homeserver.
+    pub async fn logout(&self) -> Result<(), MatrixError> {
+        self.inner
+            .matrix_auth()
+            .logout()
+            .await
+            .map_err(|e| MatrixError::Login(e.to_string()))?;
+        info!("logged out from Matrix");
+        Ok(())
+    }
+
     // ── Sync loop ─────────────────────────────────────────────────────────
 
     /// Spawn the background sync task.

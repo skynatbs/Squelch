@@ -1,19 +1,12 @@
 //! Squelch — entry point, egui UI, global PTT hotkey, and application wiring.
-//!
-//! Lifecycle:
-//!   1. Load config
-//!   2. Build PttState (shared between hotkey poller and audio pipeline)
-//!   3. Start AudioPipeline
-//!   4. Login to Matrix, start sync loop
-//!   5. Launch egui window for squad setup
-//!   6. On setup complete: hide window, show tray icon
-//!   7. PTT hotkey pressed/released → PttState::press()/release()
 
 mod app;
+mod backend;
 mod config;
 mod hotkey;
 
 use anyhow::Result;
+use tokio::runtime::Runtime;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
@@ -28,22 +21,26 @@ fn main() -> Result<()> {
 
     info!("Squelch starting");
 
+    // ── Tokio runtime (multi-thread for Matrix async work) ────────────────
+    let rt = Runtime::new()?;
+
     // ── Config ────────────────────────────────────────────────────────────
     let cfg = config::AppConfig::load()?;
-    info!(?cfg, "config loaded");
 
-    // ── PTT state (shared across all threads) ─────────────────────────────
+    // ── PTT state ─────────────────────────────────────────────────────────
     let ptt = squelch_audio::PttState::new();
 
-    // ── Hotkey manager ────────────────────────────────────────────────────
-    // Must be created on the main thread on some platforms.
+    // ── Hotkey manager (must be on main thread on some platforms) ─────────
     let _hotkey_manager = hotkey::HotkeyManager::new(ptt.clone(), cfg.ptt_key.as_deref())?;
+
+    // ── Backend task ──────────────────────────────────────────────────────
+    let backend = backend::Backend::spawn(ptt.clone(), cfg.clone(), rt.handle().clone());
 
     // ── egui application ─────────────────────────────────────────────────
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Squelch")
-            .with_inner_size([480.0, 540.0])
+            .with_inner_size([480.0, 560.0])
             .with_resizable(false),
         ..Default::default()
     };
@@ -51,9 +48,11 @@ fn main() -> Result<()> {
     eframe::run_native(
         "Squelch",
         native_options,
-        Box::new(|cc| Ok(Box::new(app::SquelchApp::new(cc, ptt, cfg)))),
+        Box::new(move |cc| Ok(Box::new(app::SquelchApp::new(cc, ptt, cfg, backend)))),
     )
     .map_err(|e| anyhow::anyhow!("eframe error: {e}"))?;
 
+    // Keep runtime alive until eframe exits
+    drop(rt);
     Ok(())
 }

@@ -1,27 +1,16 @@
-//! Squelch egui application — squad setup UI.
-//!
-//! # Screen flow
-//!
-//! ```
-//! Login ──(credentials ok)──→ Squad ──(setup complete)──→ [tray / running]
-//!                               │
-//!                         ← Back (logout)
-//! ```
-//!
-//! The window shows only during setup. Once the squad is configured and
-//! audio is running the user dismisses the window. A tray icon (post-MVP)
-//! will allow returning to the setup screen.
+//! Squelch egui application — squad setup UI backed by the async Backend.
 
 use eframe::CreationContext;
 use egui::{Align, Color32, FontId, Layout, RichText, Vec2};
 use squelch_audio::PttState;
-use tracing::info;
 
-use crate::config::AppConfig;
+use crate::{
+    backend::{Backend, BackendCmd},
+    config::AppConfig,
+};
 
 // ── Screen state ──────────────────────────────────────────────────────────
 
-/// Which screen is currently shown.
 #[derive(Debug, Clone, PartialEq)]
 enum Screen {
     Login,
@@ -31,29 +20,24 @@ enum Screen {
 
 // ── App ───────────────────────────────────────────────────────────────────
 
-/// The main egui application state.
 pub struct SquelchApp {
     screen: Screen,
     ptt: PttState,
     cfg: AppConfig,
+    backend: Backend,
 
-    // Login screen fields
+    // Login inputs
     homeserver_input: String,
     username_input: String,
     password_input: String,
-    login_error: Option<String>,
 
-    // Squad setup fields
+    // Squad setup inputs
     room_id_input: String,
     ptt_key_input: String,
-    squad_error: Option<String>,
-
-    // Runtime status
-    status_msg: Option<String>,
 }
 
 impl SquelchApp {
-    pub fn new(_cc: &CreationContext<'_>, ptt: PttState, cfg: AppConfig) -> Self {
+    pub fn new(_cc: &CreationContext<'_>, ptt: PttState, cfg: AppConfig, backend: Backend) -> Self {
         let homeserver_input = cfg.homeserver.clone();
         let username_input = cfg.username.clone();
         let ptt_key_input = cfg.ptt_key.clone().unwrap_or_else(|| "CapsLock".into());
@@ -62,20 +46,18 @@ impl SquelchApp {
             screen: Screen::Login,
             ptt,
             cfg,
+            backend,
             homeserver_input,
             username_input,
             password_input: String::new(),
-            login_error: None,
             room_id_input: String::new(),
             ptt_key_input,
-            squad_error: None,
-            status_msg: None,
         }
     }
 
     // ── Screens ───────────────────────────────────────────────────────────
 
-    fn show_login(&mut self, ui: &mut egui::Ui) {
+    fn show_login(&mut self, ui: &mut egui::Ui, st: &crate::backend::BackendState) {
         ui.vertical_centered(|ui| {
             ui.add_space(16.0);
             ui.label(
@@ -102,33 +84,51 @@ impl SquelchApp {
                     ui.end_row();
 
                     ui.label("Password");
-                    let pwd = egui::TextEdit::singleline(&mut self.password_input).password(true);
-                    ui.add(pwd);
+                    ui.add(egui::TextEdit::singleline(&mut self.password_input).password(true));
                     ui.end_row();
                 });
 
-            ui.add_space(16.0);
+            ui.add_space(12.0);
 
-            if let Some(err) = &self.login_error {
+            // Show async status / error
+            if let Some(err) = &st.error {
                 ui.label(RichText::new(err).color(Color32::RED));
-                ui.add_space(8.0);
+                ui.add_space(6.0);
+            } else if st.status != "Not connected" {
+                ui.label(RichText::new(&st.status).color(Color32::GRAY));
+                ui.add_space(6.0);
             }
 
-            if ui
-                .add_sized([180.0, 36.0], egui::Button::new("Sign in"))
-                .clicked()
-            {
-                self.do_login();
+            // Transition to squad setup when logged in
+            if st.logged_in && self.screen == Screen::Login {
+                self.screen = Screen::SquadSetup;
             }
+
+            let logging_in = !st.logged_in && st.status.contains("Logging");
+            ui.add_enabled_ui(!logging_in, |ui| {
+                if ui
+                    .add_sized([180.0, 36.0], egui::Button::new("Sign in"))
+                    .clicked()
+                {
+                    self.do_login();
+                }
+            });
 
             ui.add_space(8.0);
-            ui.label(RichText::new("Your password never leaves your device.").color(Color32::GRAY));
+            ui.label(
+                RichText::new("Your password is never stored.")
+                    .color(Color32::GRAY)
+                    .small(),
+            );
         });
     }
 
-    fn show_squad_setup(&mut self, ui: &mut egui::Ui) {
+    fn show_squad_setup(&mut self, ui: &mut egui::Ui, st: &crate::backend::BackendState) {
         ui.vertical_centered(|ui| {
             ui.add_space(12.0);
+            if let Some(uid) = &st.user_id {
+                ui.label(RichText::new(uid).color(Color32::GRAY).small());
+            }
             ui.label(
                 RichText::new("Squad Setup")
                     .font(FontId::proportional(22.0))
@@ -143,7 +143,7 @@ impl SquelchApp {
                     ui.label("Room ID");
                     ui.add(
                         egui::TextEdit::singleline(&mut self.room_id_input)
-                            .hint_text("!abc123:matrix.org  or  leave blank to create"),
+                            .hint_text("leave blank to create a new room"),
                     );
                     ui.end_row();
 
@@ -159,27 +159,43 @@ impl SquelchApp {
             ui.label(
                 RichText::new(
                     "Duo: you and your partner hear each other always.\n\
-                     Leader Net: press PTT to reach the other duo's leader.",
+                     Leader Net: hold PTT to reach the other duo's leader.",
                 )
-                .color(Color32::GRAY),
+                .color(Color32::GRAY)
+                .small(),
             );
-            ui.add_space(16.0);
+            ui.add_space(12.0);
 
-            if let Some(err) = &self.squad_error {
+            if let Some(err) = &st.error {
                 ui.label(RichText::new(err).color(Color32::RED));
-                ui.add_space(8.0);
+                ui.add_space(6.0);
+            } else if !st.status.is_empty() {
+                ui.label(RichText::new(&st.status).color(Color32::GRAY));
+                ui.add_space(6.0);
+            }
+
+            // Transition to running when room is active
+            if st.room_id.is_some() && self.screen == Screen::SquadSetup {
+                self.screen = Screen::Running;
             }
 
             ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
                 if ui
-                    .add_sized([140.0, 36.0], egui::Button::new("← Back"))
+                    .add_sized([130.0, 36.0], egui::Button::new("← Sign out"))
                     .clicked()
                 {
+                    self.backend.send(BackendCmd::Logout);
                     self.screen = Screen::Login;
+                    self.password_input.clear();
                 }
                 ui.add_space(8.0);
+                let btn_label = if self.room_id_input.trim().is_empty() {
+                    "Create Squad"
+                } else {
+                    "Join Squad"
+                };
                 if ui
-                    .add_sized([180.0, 36.0], egui::Button::new("Start Squad"))
+                    .add_sized([160.0, 36.0], egui::Button::new(btn_label))
                     .clicked()
                 {
                     self.do_start_squad();
@@ -188,117 +204,150 @@ impl SquelchApp {
         });
     }
 
-    fn show_running(&mut self, ui: &mut egui::Ui) {
+    fn show_running(
+        &mut self,
+        ui: &mut egui::Ui,
+        ctx: &egui::Context,
+        st: &crate::backend::BackendState,
+    ) {
         ui.vertical_centered(|ui| {
-            ui.add_space(24.0);
+            ui.add_space(16.0);
             ui.label(
                 RichText::new("✓ Squad Active")
-                    .font(FontId::proportional(24.0))
+                    .font(FontId::proportional(22.0))
                     .color(Color32::GREEN)
                     .strong(),
             );
+            ui.add_space(8.0);
+
+            // Room ID — copyable
+            if let Some(room_id) = &st.room_id {
+                ui.label(
+                    RichText::new("Share this Room ID with your squad:")
+                        .color(Color32::GRAY)
+                        .small(),
+                );
+                ui.add_space(4.0);
+                let mut room_id_copy = room_id.clone();
+                ui.add(
+                    egui::TextEdit::singleline(&mut room_id_copy)
+                        .desired_width(360.0)
+                        .interactive(false),
+                );
+                if ui.small_button("📋 Copy").clicked() {
+                    ctx.copy_text(room_id.clone());
+                }
+            }
+
             ui.add_space(12.0);
 
+            // PTT indicator
             let ptt_on = self.ptt.is_active();
-            let ptt_label = if ptt_on {
-                RichText::new("● PTT ON").color(Color32::RED).strong()
+            let (label, color) = if ptt_on {
+                ("● LEADER NET — TRANSMITTING", Color32::RED)
             } else {
-                RichText::new("○ PTT OFF").color(Color32::GRAY)
+                ("○ Leader Net standby", Color32::DARK_GRAY)
             };
-            ui.label(ptt_label);
+            ui.label(RichText::new(label).color(color).strong());
 
-            ui.add_space(8.0);
+            ui.add_space(4.0);
             ui.label(
                 RichText::new(format!(
                     "PTT key: {}",
                     self.cfg.ptt_key.as_deref().unwrap_or("CapsLock")
                 ))
-                .color(Color32::GRAY),
+                .color(Color32::GRAY)
+                .small(),
             );
 
-            if let Some(msg) = &self.status_msg {
-                ui.add_space(8.0);
-                ui.label(RichText::new(msg).color(Color32::GRAY));
+            // Audio status
+            ui.add_space(8.0);
+            if st.audio_active {
+                ui.label(
+                    RichText::new("🎙 Microphone active")
+                        .color(Color32::GREEN)
+                        .small(),
+                );
+            } else {
+                ui.label(
+                    RichText::new("⚠ No audio device")
+                        .color(Color32::YELLOW)
+                        .small(),
+                );
             }
 
-            ui.add_space(24.0);
-            if ui
-                .add_sized([160.0, 36.0], egui::Button::new("Leave Squad"))
-                .clicked()
-            {
-                self.do_leave_squad();
+            // Status / error
+            ui.add_space(8.0);
+            if let Some(err) = &st.error {
+                ui.label(RichText::new(err).color(Color32::RED).small());
+            } else {
+                ui.label(RichText::new(&st.status).color(Color32::GRAY).small());
             }
+
+            // If disbanded remotely, go back to setup
+            if st.room_id.is_none() && self.screen == Screen::Running {
+                self.screen = Screen::SquadSetup;
+            }
+
+            ui.add_space(20.0);
+            ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                if ui
+                    .add_sized([150.0, 36.0], egui::Button::new("Leave Session"))
+                    .clicked()
+                {
+                    self.backend.send(BackendCmd::LeaveSession);
+                    self.screen = Screen::SquadSetup;
+                }
+                // Disband is shown separately — destructive action
+                ui.add_space(8.0);
+                let disband_btn =
+                    egui::Button::new(RichText::new("Disband Squad").color(Color32::RED));
+                if ui.add_sized([150.0, 36.0], disband_btn).clicked() {
+                    self.backend.send(BackendCmd::DisbandSquad);
+                    self.screen = Screen::SquadSetup;
+                    self.room_id_input.clear();
+                }
+            });
         });
     }
 
     // ── Actions ───────────────────────────────────────────────────────────
 
     fn do_login(&mut self) {
-        self.login_error = None;
-
-        if self.homeserver_input.trim().is_empty() {
-            self.login_error = Some("Homeserver URL is required.".into());
-            return;
-        }
-        if self.username_input.trim().is_empty() {
-            self.login_error = Some("Username is required.".into());
-            return;
-        }
-        if self.password_input.is_empty() {
-            self.login_error = Some("Password is required.".into());
+        if self.homeserver_input.trim().is_empty()
+            || self.username_input.trim().is_empty()
+            || self.password_input.is_empty()
+        {
             return;
         }
 
-        // Save homeserver + username (not password) to config
         self.cfg.homeserver = self.homeserver_input.trim().to_owned();
         self.cfg.username = self.username_input.trim().to_owned();
         let _ = self.cfg.save();
 
-        info!(
-            homeserver = %self.cfg.homeserver,
-            username   = %self.cfg.username,
-            "credentials entered — proceeding to squad setup"
-        );
-
-        // Phase 4: actual Matrix login is async — wired in post-MVP integration.
-        // For now we transition to the squad setup screen immediately.
-        self.screen = Screen::SquadSetup;
+        self.backend.send(BackendCmd::Login {
+            homeserver: self.cfg.homeserver.clone(),
+            username: self.cfg.username.clone(),
+            password: self.password_input.clone(),
+        });
     }
 
     fn do_start_squad(&mut self) {
-        self.squad_error = None;
-
         if self.ptt_key_input.trim().is_empty() {
-            self.squad_error = Some("PTT key is required.".into());
             return;
         }
-
         self.cfg.ptt_key = Some(self.ptt_key_input.trim().to_owned());
         let _ = self.cfg.save();
 
-        info!(
-            room_id = %self.room_id_input,
-            ptt_key = %self.ptt_key_input,
-            "squad started"
-        );
-
-        self.status_msg = Some(format!(
-            "Logged in as {}@{}",
-            self.cfg.username,
-            self.cfg
-                .homeserver
-                .trim_start_matches("https://")
-                .trim_start_matches("http://")
-        ));
-
-        self.screen = Screen::Running;
-    }
-
-    fn do_leave_squad(&mut self) {
-        info!("leaving squad");
-        self.screen = Screen::Login;
-        self.status_msg = None;
-        self.room_id_input.clear();
+        if self.room_id_input.trim().is_empty() {
+            self.backend.send(BackendCmd::CreateRoom {
+                name: format!("Squelch Squad — {}", self.cfg.username),
+            });
+        } else {
+            self.backend.send(BackendCmd::JoinRoom {
+                room_id: self.room_id_input.trim().to_owned(),
+            });
+        }
     }
 }
 
@@ -306,17 +355,17 @@ impl SquelchApp {
 
 impl eframe::App for SquelchApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Repaint continuously while running so the PTT indicator stays live
-        if self.screen == Screen::Running {
-            ctx.request_repaint_after(std::time::Duration::from_millis(50));
-        }
+        // Always repaint while running (PTT indicator + async status updates)
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
+
+        let st = self.backend.snapshot();
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.set_min_size(Vec2::new(460.0, 520.0));
+            ui.set_min_size(Vec2::new(460.0, 540.0));
             match self.screen.clone() {
-                Screen::Login => self.show_login(ui),
-                Screen::SquadSetup => self.show_squad_setup(ui),
-                Screen::Running => self.show_running(ui),
+                Screen::Login => self.show_login(ui, &st),
+                Screen::SquadSetup => self.show_squad_setup(ui, &st),
+                Screen::Running => self.show_running(ui, ctx, &st),
             }
         });
     }

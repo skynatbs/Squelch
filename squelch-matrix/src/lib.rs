@@ -13,6 +13,6 @@ pub mod error;
 pub mod event_types;
 pub mod signaling;
 
-pub use client::MatrixClient;
+pub use client::{MatrixClient, MatrixConfig, SyncHandle};
 pub use error::MatrixError;
 pub use signaling::{IceCandidate, SdpMessage, SignalingEvent};
