@@ -8,6 +8,7 @@ description = "WebRTC peer connections and audio streams for Squelch, powered by
 [dependencies]
 squelch-core   = { path = "../squelch-core" }
 squelch-matrix = { path = "../squelch-matrix" }
+squelch-audio  = { path = "../squelch-audio" }
 thiserror      = { workspace = true }
 anyhow         = { workspace = true }
 serde          = { workspace = true }

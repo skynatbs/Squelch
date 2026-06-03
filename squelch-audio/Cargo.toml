@@ -12,3 +12,5 @@ anyhow       = { workspace = true }
 tracing      = { workspace = true }
 cpal         = { workspace = true }
 ringbuf      = { workspace = true }
+opus         = { workspace = true }
+tokio        = { workspace = true }

@@ -6,8 +6,8 @@ use std::sync::{
 };
 
 /// Shared PTT state. Clone-able, cheap to share across threads.
-#[derive(Clone)]
-pub struct PttState(Arc<AtomicBool>);
+#[derive(Clone, Debug)]
+pub struct PttState(pub(crate) Arc<AtomicBool>);
 
 impl PttState {
     /// Create a new PTT state, initially inactive.

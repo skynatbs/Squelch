@@ -25,8 +25,9 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 
 # Audio
-cpal = "0.15"
+cpal    = "0.15"
 ringbuf = "0.3"
+opus    = "0.3"
 
 # WebRTC
 str0m = "0.20"

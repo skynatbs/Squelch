@@ -2,21 +2,26 @@
 //!
 //! Responsibilities:
 //! - Capture microphone input via cpal (f32, device-default sample rate)
-//! - Route captured PCM to two logical channels:
-//!     - Duo channel: always-on, forwarded to duo partner's WebRTC stream
-//!     - Leader net:  PTT-gated, forwarded to all leaders' WebRTC streams
-//! - Mix incoming PCM from remote peers into a single output stream
-//! - Manage PTT state (AtomicBool, set by squelch-app on hotkey press/release)
+//! - Encode mono PCM to Opus frames (20ms @ 48kHz) for WebRTC
+//! - Route encoded audio to two logical channels:
+//!     - Duo channel: always-on
+//!     - Leader net: PTT-gated
+//! - Decode incoming Opus frames from remote peers
+//! - Mix all remote streams into a single cpal output stream
 //!
 //! # Pipeline
 //!
 //! ```text
-//! cpal input  → [duo_ring]    → squelch-webrtc (encode → str0m → network)
-//!             → [leader_ring] → squelch-webrtc (only when ptt_active=true)
+//! cpal input → encode(Opus) → duo_ch   → squelch-webrtc (duo peer)
+//!                           → leader_ch → squelch-webrtc (leaders, PTT only)
 //!
-//! squelch-webrtc (network → str0m → decode) → [remote_ring(s)]
-//!                                           → cpal output (mix + clamp)
+//! squelch-webrtc → decode(Opus) → mix → cpal output
 //! ```
 
+pub mod error;
 pub mod pipeline;
 pub mod ptt;
+
+pub use error::AudioError;
+pub use pipeline::{AudioConfig, AudioHandles, AudioPipeline, OPUS_FRAME_SAMPLES};
+pub use ptt::PttState;
