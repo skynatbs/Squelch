@@ -1,19 +1,24 @@
 //! Backend — async state machine that manages Matrix login, squad room,
-//! audio pipeline, and (later) WebRTC peer mesh.
+//! audio pipeline, and WebRTC peer connections.
 //!
 //! The UI only talks to the `Backend` via `BackendCmd` and reads status from
 //! `BackendState`. No matrix-sdk or cpal types leak into the UI layer.
 
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
-use squelch_audio::{AudioConfig, AudioHandles, AudioPipeline, PttState};
-use squelch_matrix::{MatrixClient, SignalingEvent, client::SyncHandle};
-
-// Ruma types via matrix-sdk re-export (access through squelch-matrix dependency)
 use matrix_sdk::ruma::OwnedRoomId;
+use squelch_audio::{AudioConfig, AudioPipeline, PttState};
+use squelch_matrix::{MatrixClient, SignalingEvent, client::SyncHandle, event_types};
+use squelch_webrtc::{PeerConnection, PeerRole};
 use tokio::{
     runtime::Handle,
-    sync::mpsc::{self, UnboundedSender},
+    sync::{
+        mpsc::{self, UnboundedSender},
+        oneshot,
+    },
 };
 use tracing::{error, info, warn};
 
@@ -21,105 +26,84 @@ use crate::config::AppConfig;
 
 // ── Commands (UI → Backend) ────────────────────────────────────────────────
 
-/// Commands the UI sends to the backend task.
 #[derive(Debug)]
 pub enum BackendCmd {
-    /// Log in to Matrix and start the audio pipeline.
     Login {
         homeserver: String,
         username: String,
         password: String,
     },
-    /// Create a new squad room and become its leader.
-    CreateRoom { name: String },
-    /// Join an existing squad room by ID.
-    JoinRoom { room_id: String },
-    /// Leave the current session (room stays).
+    CreateRoom {
+        name: String,
+    },
+    JoinRoom {
+        room_id: String,
+    },
     LeaveSession,
-    /// Disband the squad (leader only — sends disband to all members, leaves room).
     DisbandSquad,
-    /// Log out and stop everything.
     Logout,
 }
 
 // ── Status (Backend → UI) ─────────────────────────────────────────────────
 
-/// Current backend status — read by the UI on every frame.
 #[derive(Debug, Clone, Default)]
 pub struct BackendState {
-    /// Human-readable status line shown in the UI.
     pub status: String,
-    /// Non-empty when the last action produced an error.
     pub error: Option<String>,
-    /// Matrix user ID after login (e.g. `@alice:matrix.org`).
     pub user_id: Option<String>,
-    /// Active room ID (set after create/join).
     pub room_id: Option<String>,
-    /// Whether the audio pipeline is active.
     pub audio_active: bool,
-    /// Whether we are currently logged in to Matrix.
     pub logged_in: bool,
+    /// Connected peer user IDs (for the running screen member list)
+    pub peers: Vec<String>,
 }
 
 // ── Backend handle ────────────────────────────────────────────────────────
 
-/// Handle used by the UI to send commands and read state.
 #[derive(Clone)]
 pub struct Backend {
     cmd_tx: UnboundedSender<BackendCmd>,
-    /// Shared state — written by the backend task, read by the UI.
     pub state: Arc<Mutex<BackendState>>,
 }
 
 impl Backend {
-    /// Spawn the backend task on the given Tokio runtime handle.
-    ///
-    /// The `AudioPipeline` is started in a dedicated `std::thread` because
-    /// cpal streams are not `Send` on all platforms (Linux/ALSA especially).
-    pub fn spawn(ptt: PttState, cfg: AppConfig, rt: Handle) -> Self {
+    pub fn spawn(ptt: PttState, _cfg: AppConfig, rt: Handle) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
         let state = Arc::new(Mutex::new(BackendState {
             status: "Not connected".into(),
             ..Default::default()
         }));
 
-        // Start audio pipeline on a dedicated thread (cpal not Send)
+        // Audio pipeline on its own thread (cpal not Send)
         let audio_state = state.clone();
         let ptt_audio = ptt.clone();
         std::thread::Builder::new()
             .name("squelch-audio".into())
-            .spawn(move || {
-                match AudioPipeline::start(AudioConfig { ptt: ptt_audio }) {
-                    Ok((_pipeline, _handles)) => {
+            .spawn(
+                move || match AudioPipeline::start(AudioConfig { ptt: ptt_audio }) {
+                    Ok(_) => {
                         audio_state.lock().unwrap().audio_active = true;
-                        // Keep pipeline alive by blocking this thread
                         loop {
                             std::thread::sleep(std::time::Duration::from_secs(3600));
                         }
                     }
-                    Err(e) => {
-                        warn!("audio pipeline failed to start: {e}");
-                    }
-                }
-            })
+                    Err(e) => warn!("audio pipeline failed: {e}"),
+                },
+            )
             .expect("failed to spawn audio thread");
 
         let state_clone = state.clone();
-        rt.spawn(async move {
-            run(cmd_rx, state_clone, ptt, cfg).await;
-        });
+        rt.spawn(async move { run(cmd_rx, state_clone).await });
 
         Self { cmd_tx, state }
     }
 
-    /// Send a command to the backend.
     pub fn send(&self, cmd: BackendCmd) {
         if let Err(e) = self.cmd_tx.send(cmd) {
             error!("backend cmd send error: {e}");
         }
     }
 
-    /// Read a snapshot of the current backend state.
     pub fn snapshot(&self) -> BackendState {
         self.state.lock().unwrap().clone()
     }
@@ -127,39 +111,25 @@ impl Backend {
 
 // ── Backend task ──────────────────────────────────────────────────────────
 
-struct BackendInner {
+struct Inner {
     matrix: Option<MatrixClient>,
-    _handles: Option<AudioHandles>,
     _sync: Option<SyncHandle>,
     room_id: Option<OwnedRoomId>,
+    /// shutdown senders for active WebRTC run loops
+    peer_shutdown: HashMap<String, oneshot::Sender<()>>,
 }
 
-async fn run(
-    mut cmd_rx: mpsc::UnboundedReceiver<BackendCmd>,
-    state: Arc<Mutex<BackendState>>,
-    _ptt: PttState,
-    _cfg: AppConfig,
-) {
-    let mut inner = BackendInner {
+async fn run(mut cmd_rx: mpsc::UnboundedReceiver<BackendCmd>, state: Arc<Mutex<BackendState>>) {
+    let mut inner = Inner {
         matrix: None,
-        _handles: None,
         _sync: None,
         room_id: None,
-    };
-
-    let set_status = |state: &Arc<Mutex<BackendState>>, msg: &str| {
-        state.lock().unwrap().status = msg.to_owned();
-    };
-    let set_error = |state: &Arc<Mutex<BackendState>>, err: &str| {
-        state.lock().unwrap().error = Some(err.to_owned());
-        state.lock().unwrap().status = "Error".into();
-    };
-    let clear_error = |state: &Arc<Mutex<BackendState>>| {
-        state.lock().unwrap().error = None;
+        peer_shutdown: HashMap::new(),
     };
 
     while let Some(cmd) = cmd_rx.recv().await {
-        clear_error(&state);
+        state.lock().unwrap().error = None;
+
         match cmd {
             // ── Login ──────────────────────────────────────────────────────
             BackendCmd::Login {
@@ -188,25 +158,25 @@ async fn run(
                         let uid = client.user_id().to_string();
                         info!(%uid, "matrix login ok");
 
-                        // Start sync loop
                         let (sync_handle, mut sig_rx) = client.start_sync();
 
-                        // Spawn signaling event dispatcher
+                        // Dispatch signaling events
                         let state2 = state.clone();
+                        let client2 = client.clone();
                         tokio::spawn(async move {
                             while let Some(event) = sig_rx.recv().await {
-                                handle_signaling_event(event, &state2).await;
+                                handle_signaling_event(event, &state2, &client2).await;
                             }
                         });
 
                         inner.matrix = Some(client);
                         inner._sync = Some(sync_handle);
 
-                        // Audio pipeline is already running (started in Backend::spawn)
                         set_status(&state, &format!("Logged in as {uid}"));
-                        state.lock().unwrap().logged_in = true;
-                        state.lock().unwrap().user_id = Some(uid);
-                        state.lock().unwrap().error = None;
+                        let mut s = state.lock().unwrap();
+                        s.logged_in = true;
+                        s.user_id = Some(uid);
+                        s.error = None;
                     }
                 }
             }
@@ -218,7 +188,6 @@ async fn run(
                     continue;
                 };
                 set_status(&state, "Creating squad room…");
-
                 match client.create_squad_room(&name, &[]).await {
                     Err(e) => set_error(&state, &format!("Could not create room: {e}")),
                     Ok(room_id) => {
@@ -239,10 +208,10 @@ async fn run(
                 };
                 set_status(&state, "Joining squad room…");
 
-                let parsed = match room_id.parse::<matrix_sdk::ruma::OwnedRoomId>() {
+                let parsed = match room_id.parse::<OwnedRoomId>() {
                     Ok(id) => id,
                     Err(_) => {
-                        set_error(&state, "Invalid room ID format.");
+                        set_error(&state, "Invalid room ID.");
                         continue;
                     }
                 };
@@ -251,6 +220,26 @@ async fn run(
                     Err(e) => set_error(&state, &format!("Could not join room: {e}")),
                     Ok(()) => {
                         info!(%parsed, "joined squad room");
+
+                        // Discover existing members and offer WebRTC to each
+                        let my_uid = client.user_id().to_string();
+                        if let Ok(members) = client.room_members(&parsed).await {
+                            for member_uid in &members {
+                                let uid_str = member_uid.to_string();
+                                if uid_str == my_uid {
+                                    continue;
+                                }
+                                connect_to_peer(
+                                    client,
+                                    member_uid,
+                                    &parsed,
+                                    &state,
+                                    &mut inner.peer_shutdown,
+                                )
+                                .await;
+                            }
+                        }
+
                         let id_str = parsed.to_string();
                         inner.room_id = Some(parsed);
                         state.lock().unwrap().room_id = Some(id_str);
@@ -261,48 +250,59 @@ async fn run(
 
             // ── Leave session ──────────────────────────────────────────────
             BackendCmd::LeaveSession => {
-                let (Some(client), Some(room_id)) = (&inner.matrix, &inner.room_id) else {
-                    continue;
-                };
-                set_status(&state, "Leaving session…");
-                if let Err(e) = client.leave_room(room_id).await {
-                    warn!("leave_room error: {e}");
+                shutdown_peers(&mut inner.peer_shutdown);
+                if let (Some(client), Some(room_id)) = (&inner.matrix, &inner.room_id) {
+                    let _ = client.leave_room(room_id).await;
                 }
                 inner.room_id = None;
-                state.lock().unwrap().room_id = None;
+                let mut s = state.lock().unwrap();
+                s.room_id = None;
+                s.peers = vec![];
+                drop(s);
                 set_status(&state, "Left session. Room still exists.");
             }
 
             // ── Disband squad ──────────────────────────────────────────────
             BackendCmd::DisbandSquad => {
-                let (Some(client), Some(room_id)) = (&inner.matrix, &inner.room_id) else {
-                    set_error(&state, "Not in a squad room.");
-                    continue;
-                };
-                set_status(&state, "Disbanding squad…");
-
-                // TODO: send disband to-device to all members before leaving
-                // (requires fetching room member list + their device IDs)
-                // For now: just leave the room ourselves
-                info!(%room_id, "disbanding squad");
-                if let Err(e) = client.leave_room(room_id).await {
-                    warn!("leave_room on disband: {e}");
+                shutdown_peers(&mut inner.peer_shutdown);
+                if let (Some(client), Some(room_id)) = (&inner.matrix, &inner.room_id) {
+                    // Send disband to all members
+                    if let Ok(members) = client.room_members(room_id).await {
+                        let my_uid = client.user_id().to_string();
+                        for m in &members {
+                            if m.as_str() == my_uid {
+                                continue;
+                            }
+                            let _ = client
+                                .send_to_all_devices(
+                                    m,
+                                    event_types::DISBAND,
+                                    serde_json::json!({ "room_id": room_id.as_str() }),
+                                )
+                                .await;
+                        }
+                    }
+                    let _ = client.leave_room(room_id).await;
                 }
                 inner.room_id = None;
-                state.lock().unwrap().room_id = None;
+                let mut s = state.lock().unwrap();
+                s.room_id = None;
+                s.peers = vec![];
+                drop(s);
                 set_status(&state, "Squad disbanded.");
             }
 
             // ── Logout ─────────────────────────────────────────────────────
             BackendCmd::Logout => {
+                shutdown_peers(&mut inner.peer_shutdown);
                 if let Some(client) = &inner.matrix {
                     let _ = client.logout().await;
                 }
-                inner = BackendInner {
+                inner = Inner {
                     matrix: None,
-                    _handles: None,
                     _sync: None,
                     room_id: None,
+                    peer_shutdown: HashMap::new(),
                 };
                 let mut s = state.lock().unwrap();
                 *s = BackendState {
@@ -314,24 +314,177 @@ async fn run(
     }
 }
 
-/// Handle incoming signaling events from the Matrix sync loop.
-async fn handle_signaling_event(event: SignalingEvent, state: &Arc<Mutex<BackendState>>) {
+// ── WebRTC helpers ────────────────────────────────────────────────────────
+
+/// Initiate a WebRTC connection to a peer: send SDP offer via Matrix.
+async fn connect_to_peer(
+    client: &MatrixClient,
+    peer_uid: &matrix_sdk::ruma::OwnedUserId,
+    room_id: &OwnedRoomId,
+    state: &Arc<Mutex<BackendState>>,
+    shutdowns: &mut HashMap<String, oneshot::Sender<()>>,
+) {
+    let uid_str = peer_uid.to_string();
+    if shutdowns.contains_key(&uid_str) {
+        info!(%uid_str, "already connected, skipping");
+        return;
+    }
+
+    let (conn, _audio_rx) = match PeerConnection::new(uid_str.clone(), PeerRole::Offerer) {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("PeerConnection::new failed: {e}");
+            return;
+        }
+    };
+
+    let offer_sdp = match conn.create_offer() {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("create_offer failed: {e}");
+            return;
+        }
+    };
+
+    let call_id = format!("{}-{}", room_id.as_str(), uid_str);
+    let payload = squelch_matrix::SdpMessage {
+        call_id: call_id.clone(),
+        room_id: room_id.to_string(),
+        sdp: offer_sdp,
+    };
+
+    if let Err(e) = client
+        .send_to_all_devices(
+            peer_uid,
+            event_types::SDP_OFFER,
+            serde_json::to_value(&payload).unwrap_or_default(),
+        )
+        .await
+    {
+        warn!("send SDP offer failed: {e}");
+        return;
+    }
+
+    info!(%uid_str, "SDP offer sent, waiting for answer");
+
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    shutdowns.insert(uid_str.clone(), shutdown_tx);
+
+    std::thread::Builder::new()
+        .name(format!("webrtc-{uid_str}"))
+        .spawn(move || conn.run(shutdown_rx))
+        .ok();
+
+    state.lock().unwrap().peers.push(uid_str);
+}
+
+/// Abort all active WebRTC run loops.
+fn shutdown_peers(shutdowns: &mut HashMap<String, oneshot::Sender<()>>) {
+    for (uid, tx) in shutdowns.drain() {
+        info!(%uid, "shutting down peer connection");
+        let _ = tx.send(());
+    }
+}
+
+// ── Signaling event handler ───────────────────────────────────────────────
+
+async fn handle_signaling_event(
+    event: SignalingEvent,
+    state: &Arc<Mutex<BackendState>>,
+    client: &MatrixClient,
+) {
     match event {
-        SignalingEvent::Disband { from, room_id } => {
-            // TODO: validate that `from` is the current squad leader
-            warn!(sender = %from, %room_id, "received disband event — leaving room");
-            // UI will pick this up on the next frame via state.room_id = None
-            state.lock().unwrap().room_id = None;
-            state.lock().unwrap().status = "Squad disbanded by leader.".into();
+        SignalingEvent::SdpOffer { from, payload } => {
+            info!(sender = %from, "received SDP offer — answering");
+
+            let peer_uid: matrix_sdk::ruma::OwnedUserId = match from.parse() {
+                Ok(u) => u,
+                Err(_) => {
+                    warn!("invalid user ID in SDP offer: {from}");
+                    return;
+                }
+            };
+
+            let (conn, _audio_rx) = match PeerConnection::new(from.clone(), PeerRole::Answerer) {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!("PeerConnection::new (answerer) failed: {e}");
+                    return;
+                }
+            };
+
+            let answer_sdp = match conn.accept_offer(&payload.sdp) {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("accept_offer failed: {e}");
+                    return;
+                }
+            };
+
+            let answer = squelch_matrix::SdpMessage {
+                call_id: payload.call_id,
+                room_id: payload.room_id.clone(),
+                sdp: answer_sdp,
+            };
+
+            if let Err(e) = client
+                .send_to_all_devices(
+                    &peer_uid,
+                    event_types::SDP_ANSWER,
+                    serde_json::to_value(&answer).unwrap_or_default(),
+                )
+                .await
+            {
+                warn!("send SDP answer failed: {e}");
+                return;
+            }
+
+            let (_shutdown_tx, shutdown_rx) = oneshot::channel();
+            let uid_str = from.clone();
+            std::thread::Builder::new()
+                .name(format!("webrtc-{uid_str}"))
+                .spawn(move || conn.run(shutdown_rx))
+                .ok();
+            // TODO Phase 5b: store shutdown_tx so we can abort this connection
+
+            let mut s = state.lock().unwrap();
+            if !s.peers.contains(&uid_str) {
+                s.peers.push(uid_str);
+            }
         }
-        SignalingEvent::SdpOffer { from, .. } => {
-            info!(sender = %from, "received SDP offer — WebRTC peer wiring is Phase 5");
-        }
-        SignalingEvent::SdpAnswer { from, .. } => {
+
+        SignalingEvent::SdpAnswer { from, payload } => {
             info!(sender = %from, "received SDP answer");
+            // The PeerConnection's run loop is already started (from connect_to_peer).
+            // We need to feed the answer to it. For now we log — full answer routing
+            // requires storing PeerConnection references (Phase 5b).
+            // TODO Phase 5b: route answer to existing PeerConnection
+            let _ = payload;
         }
-        SignalingEvent::IceCandidate { from, .. } => {
+
+        SignalingEvent::IceCandidate { from, payload } => {
             info!(sender = %from, "received ICE candidate");
+            // TODO Phase 5b: route ICE candidate to PeerConnection
+            let _ = payload;
+        }
+
+        SignalingEvent::Disband { from, room_id } => {
+            warn!(sender = %from, %room_id, "disband event received — leaving room");
+            state.lock().unwrap().room_id = None;
+            state.lock().unwrap().peers = vec![];
+            set_status(state, "Squad disbanded by leader.");
         }
     }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+fn set_status(state: &Arc<Mutex<BackendState>>, msg: &str) {
+    state.lock().unwrap().status = msg.to_owned();
+}
+
+fn set_error(state: &Arc<Mutex<BackendState>>, err: &str) {
+    let mut s = state.lock().unwrap();
+    s.error = Some(err.to_owned());
+    s.status = "Error".into();
 }

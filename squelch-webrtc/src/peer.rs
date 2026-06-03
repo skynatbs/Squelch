@@ -19,7 +19,7 @@
 //! get the answer string, send it back via Matrix.
 
 use std::{
-    net::{SocketAddr, UdpSocket},
+    net::{IpAddr, SocketAddr, UdpSocket},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -33,6 +33,19 @@ use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
 use crate::error::WebRtcError;
+
+// ── Network helpers ──────────────────────────────────────────────────────────
+
+/// Returns the first non-loopback, non-link-local IPv4 address on any interface.
+/// Falls back to None if none is found (caller should use 127.0.0.1).
+fn local_ipv4() -> Option<IpAddr> {
+    // Use a UDP connect trick: connect to a public IP (no packet sent)
+    // and read the local address the OS selected.
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    let addr = socket.local_addr().ok()?;
+    Some(addr.ip())
+}
 
 /// Role of this peer in the WebRTC negotiation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +78,8 @@ pub struct PeerConnection {
     pub role: PeerRole,
     /// Local UDP socket address.
     local_addr: SocketAddr,
+    /// Bound UDP socket — transferred to the run loop via `take_socket()`.
+    socket: Arc<Mutex<Option<UdpSocket>>>,
     /// Shared inner state.
     inner: Arc<Mutex<Inner>>,
     /// Sends encoded audio (Opus bytes) from remote → squelch-audio.
@@ -75,15 +90,16 @@ pub struct PeerConnection {
 }
 
 impl PeerConnection {
-    /// Create a new peer connection bound to a random local UDP port.
+    /// Create a new peer connection.
     ///
-    /// Returns the connection and the channel to receive encoded audio bytes
-    /// from the remote peer (connect this to squelch-audio).
+    /// Binds a UDP socket to the first non-loopback IPv4 address found on the
+    /// system, falling back to 127.0.0.1 for local testing.
     pub fn new(
         remote_id: impl Into<String>,
         role: PeerRole,
     ) -> Result<(Self, mpsc::Receiver<Vec<u8>>), WebRtcError> {
-        let socket = UdpSocket::bind("0.0.0.0:0")?;
+        let local_ip = local_ipv4().unwrap_or([127, 0, 0, 1].into());
+        let socket = UdpSocket::bind((local_ip, 0u16))?;
         let local_addr = socket.local_addr()?;
 
         let rtc = Rtc::new(Instant::now());
@@ -94,6 +110,7 @@ impl PeerConnection {
             remote_id: remote_id.into(),
             role,
             local_addr,
+            socket: Arc::new(Mutex::new(Some(socket))),
             inner: Arc::new(Mutex::new(Inner {
                 rtc,
                 pending: None,
@@ -110,6 +127,12 @@ impl PeerConnection {
     /// Returns the local UDP address for this connection.
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
+    }
+
+    /// Take the bound UDP socket for use in the run loop.
+    /// Can only be called once — returns None if already taken.
+    pub fn take_socket(&self) -> Option<UdpSocket> {
+        self.socket.lock().unwrap().take()
     }
 
     // ── SDP / ICE ─────────────────────────────────────────────────────────
@@ -200,10 +223,16 @@ impl PeerConnection {
 
     /// Drive the str0m event loop. Call this in a dedicated `std::thread`.
     ///
-    /// Takes ownership of a bound `UdpSocket` (use the same local address as
-    /// returned by [`local_addr`]). Runs until the remote peer disconnects or
-    /// `shutdown_rx` fires.
-    pub fn run(self, socket: UdpSocket, mut shutdown_rx: tokio::sync::oneshot::Receiver<()>) {
+    /// Uses the socket bound during `new()`. Runs until the remote peer
+    /// disconnects or `shutdown_rx` fires.
+    pub fn run(self, mut shutdown_rx: tokio::sync::oneshot::Receiver<()>) {
+        let socket = match self.take_socket() {
+            Some(s) => s,
+            None => {
+                warn!(remote = %self.remote_id, "run() called but socket already taken");
+                return;
+            }
+        };
         let mut buf = vec![0u8; 2048];
         let mut media_ts: u64 = 0;
         let mut audio_pt = None;

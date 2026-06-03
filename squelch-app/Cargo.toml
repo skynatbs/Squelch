@@ -24,5 +24,6 @@ tray-icon          = { workspace = true }
 tokio              = { workspace = true }
 serde              = { workspace = true }
 matrix-sdk         = { workspace = true }
+serde_json         = { workspace = true }
 dirs               = "5"
 toml               = "0.8"

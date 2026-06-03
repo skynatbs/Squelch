@@ -57,6 +57,7 @@ pub struct MatrixConfig {
 // ── Client ─────────────────────────────────────────────────────────────────
 
 /// Squelch's Matrix client — wraps matrix-sdk and exposes signaling primitives.
+#[derive(Clone)]
 pub struct MatrixClient {
     inner: Client,
     user_id: OwnedUserId,
@@ -231,6 +232,61 @@ impl MatrixClient {
             info!(%room_id, "left squad room");
         }
         Ok(())
+    }
+
+    /// Send a signaling message to **all known devices** of a user.
+    ///
+    /// Used for WebRTC signaling where we don't know the target device ID in advance.
+    pub async fn send_to_all_devices(
+        &self,
+        target_user: &OwnedUserId,
+        event_type: &str,
+        content: serde_json::Value,
+    ) -> Result<(), MatrixError> {
+        let raw = Raw::from_json(
+            serde_json::value::to_raw_value(&content)
+                .map_err(|e| MatrixError::Signaling(e.to_string()))?,
+        );
+
+        let mut per_device: BTreeMap<DeviceIdOrAllDevices, Raw<AnyToDeviceEventContent>> =
+            BTreeMap::new();
+        per_device.insert(DeviceIdOrAllDevices::AllDevices, raw);
+
+        let mut messages = send_to_device::Messages::new();
+        messages.insert(target_user.clone(), per_device);
+
+        self.inner
+            .send(send_to_device::Request::new_raw(
+                event_type.into(),
+                TransactionId::new(),
+                messages,
+            ))
+            .await
+            .map_err(|e| MatrixError::Signaling(e.to_string()))?;
+
+        debug!(%target_user, event_type, "to-device broadcast sent");
+        Ok(())
+    }
+
+    /// Return the Matrix user IDs of all joined members in a room.
+    ///
+    /// Used to discover who is in the squad after joining.
+    pub async fn room_members(
+        &self,
+        room_id: &OwnedRoomId,
+    ) -> Result<Vec<OwnedUserId>, MatrixError> {
+        use matrix_sdk::RoomMemberships;
+        let room = self
+            .inner
+            .get_room(room_id)
+            .ok_or_else(|| MatrixError::Room(format!("room {room_id} not found")))?;
+
+        let members = room
+            .members(RoomMemberships::JOIN)
+            .await
+            .map_err(|e| MatrixError::Room(e.to_string()))?;
+
+        Ok(members.iter().map(|m| m.user_id().to_owned()).collect())
     }
 
     /// Log out from the Matrix homeserver.
