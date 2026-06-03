@@ -58,8 +58,8 @@ pub struct MatrixConfig {
 
 /// Squelch's Matrix client — wraps matrix-sdk and exposes signaling primitives.
 pub struct MatrixClient {
-    inner:     Client,
-    user_id:   OwnedUserId,
+    inner: Client,
+    user_id: OwnedUserId,
     device_id: OwnedDeviceId,
 }
 
@@ -101,7 +101,11 @@ impl MatrixClient {
             .await
             .map_err(|e| MatrixError::Sync(e.to_string()))?;
 
-        Ok(Self { inner: client, user_id, device_id })
+        Ok(Self {
+            inner: client,
+            user_id,
+            device_id,
+        })
     }
 
     /// Returns this client's Matrix user ID.
@@ -163,9 +167,10 @@ impl MatrixClient {
         target_device: &OwnedDeviceId,
         payload: &SdpMessage,
     ) -> Result<(), MatrixError> {
-        let content = serde_json::to_value(payload)
-            .map_err(|e| MatrixError::Signaling(e.to_string()))?;
-        self.send_to_device(target_user, target_device, event_types::SDP_OFFER, content).await
+        let content =
+            serde_json::to_value(payload).map_err(|e| MatrixError::Signaling(e.to_string()))?;
+        self.send_to_device(target_user, target_device, event_types::SDP_OFFER, content)
+            .await
     }
 
     /// Send a WebRTC SDP answer to a remote peer.
@@ -175,9 +180,10 @@ impl MatrixClient {
         target_device: &OwnedDeviceId,
         payload: &SdpMessage,
     ) -> Result<(), MatrixError> {
-        let content = serde_json::to_value(payload)
-            .map_err(|e| MatrixError::Signaling(e.to_string()))?;
-        self.send_to_device(target_user, target_device, event_types::SDP_ANSWER, content).await
+        let content =
+            serde_json::to_value(payload).map_err(|e| MatrixError::Signaling(e.to_string()))?;
+        self.send_to_device(target_user, target_device, event_types::SDP_ANSWER, content)
+            .await
     }
 
     /// Send a WebRTC ICE candidate to a remote peer.
@@ -187,9 +193,15 @@ impl MatrixClient {
         target_device: &OwnedDeviceId,
         payload: &IceCandidate,
     ) -> Result<(), MatrixError> {
-        let content = serde_json::to_value(payload)
-            .map_err(|e| MatrixError::Signaling(e.to_string()))?;
-        self.send_to_device(target_user, target_device, event_types::ICE_CANDIDATE, content).await
+        let content =
+            serde_json::to_value(payload).map_err(|e| MatrixError::Signaling(e.to_string()))?;
+        self.send_to_device(
+            target_user,
+            target_device,
+            event_types::ICE_CANDIDATE,
+            content,
+        )
+        .await
     }
 
     // ── Sync loop ─────────────────────────────────────────────────────────
@@ -204,8 +216,7 @@ impl MatrixClient {
         let user_id = self.user_id.clone();
 
         let handle = tokio::spawn(async move {
-            let settings = SyncSettings::default()
-                .timeout(Duration::from_secs(SYNC_TIMEOUT_SECS));
+            let settings = SyncSettings::default().timeout(Duration::from_secs(SYNC_TIMEOUT_SECS));
 
             loop {
                 match client.sync_once(settings.clone()).await {
@@ -222,10 +233,8 @@ impl MatrixClient {
                             };
 
                             if let Ok(val) = raw.deserialize_as::<serde_json::Value>() {
-                                let ev_type = val
-                                    .get("type")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("");
+                                let ev_type =
+                                    val.get("type").and_then(|v| v.as_str()).unwrap_or("");
                                 let sender = val
                                     .get("sender")
                                     .and_then(|v| v.as_str())
@@ -233,28 +242,37 @@ impl MatrixClient {
                                     .to_owned();
 
                                 // Ignore our own events
-                                if sender == user_id.as_str() { continue; }
+                                if sender == user_id.as_str() {
+                                    continue;
+                                }
 
-                                let content = val
-                                    .get("content")
-                                    .cloned()
-                                    .unwrap_or(serde_json::json!({}));
+                                let content =
+                                    val.get("content").cloned().unwrap_or(serde_json::json!({}));
 
                                 let signal = match ev_type {
                                     event_types::SDP_OFFER => {
-                                        serde_json::from_value::<SdpMessage>(content)
-                                            .ok()
-                                            .map(|p| SignalingEvent::SdpOffer { from: sender, payload: p })
+                                        serde_json::from_value::<SdpMessage>(content).ok().map(
+                                            |p| SignalingEvent::SdpOffer {
+                                                from: sender,
+                                                payload: p,
+                                            },
+                                        )
                                     }
                                     event_types::SDP_ANSWER => {
-                                        serde_json::from_value::<SdpMessage>(content)
-                                            .ok()
-                                            .map(|p| SignalingEvent::SdpAnswer { from: sender, payload: p })
+                                        serde_json::from_value::<SdpMessage>(content).ok().map(
+                                            |p| SignalingEvent::SdpAnswer {
+                                                from: sender,
+                                                payload: p,
+                                            },
+                                        )
                                     }
                                     event_types::ICE_CANDIDATE => {
-                                        serde_json::from_value::<IceCandidate>(content)
-                                            .ok()
-                                            .map(|p| SignalingEvent::IceCandidate { from: sender, payload: p })
+                                        serde_json::from_value::<IceCandidate>(content).ok().map(
+                                            |p| SignalingEvent::IceCandidate {
+                                                from: sender,
+                                                payload: p,
+                                            },
+                                        )
                                     }
                                     _ => {
                                         debug!(ev_type, "unknown to-device event, ignoring");
@@ -262,6 +280,9 @@ impl MatrixClient {
                                     }
                                 };
 
+                                // let-chains (if let X && Y) require nightly;
+                                // keep as nested ifs on stable.
+                                #[allow(clippy::collapsible_if)]
                                 if let Some(ev) = signal {
                                     if tx.send(ev).await.is_err() {
                                         // Receiver dropped — shutdown sync loop

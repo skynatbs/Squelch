@@ -20,9 +20,9 @@
 //! The [`PeerMesh`] manages all connections for one local player.
 
 pub mod error;
-pub mod peer;
 pub mod mesh;
+pub mod peer;
 
 pub use error::WebRtcError;
-pub use peer::{PeerConnection, PeerRole};
 pub use mesh::PeerMesh;
+pub use peer::{PeerConnection, PeerRole};

@@ -1,6 +1,9 @@
 //! Push-to-talk state — shared between the audio thread and the UI/hotkey thread.
 
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 /// Shared PTT state. Clone-able, cheap to share across threads.
 #[derive(Clone)]
@@ -29,7 +32,9 @@ impl PttState {
 }
 
 impl Default for PttState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

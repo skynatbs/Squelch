@@ -19,15 +19,20 @@ pub struct PeerMesh {
 impl PeerMesh {
     /// Create an empty mesh.
     pub fn new() -> Self {
-        Self { peers: HashMap::new() }
+        Self {
+            peers: HashMap::new(),
+        }
     }
 
     /// Add a peer connection to the mesh.
+    ///
+    /// Returns a receiver for encoded Opus audio bytes from the remote peer.
+    /// Connect this to `squelch-audio` for decoding and mixing.
     pub fn add_peer(
         &mut self,
         remote_id: impl Into<String>,
         role: PeerRole,
-    ) -> Result<tokio::sync::mpsc::Receiver<Vec<f32>>, WebRtcError> {
+    ) -> Result<tokio::sync::mpsc::Receiver<Vec<u8>>, WebRtcError> {
         let id = remote_id.into();
         let (conn, audio_rx) = PeerConnection::new(id.clone(), role)?;
         self.peers.insert(id, conn);
@@ -56,7 +61,9 @@ impl PeerMesh {
 }
 
 impl Default for PeerMesh {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -68,8 +75,12 @@ mod tests {
         let mut mesh = PeerMesh::new();
         assert!(mesh.is_empty());
 
-        let _rx = mesh.add_peer("@alice:example.org", PeerRole::Offerer).unwrap();
-        let _rx = mesh.add_peer("@bob:example.org", PeerRole::Answerer).unwrap();
+        let _rx = mesh
+            .add_peer("@alice:example.org", PeerRole::Offerer)
+            .unwrap();
+        let _rx = mesh
+            .add_peer("@bob:example.org", PeerRole::Answerer)
+            .unwrap();
 
         assert_eq!(mesh.len(), 2);
         assert!(mesh.get("@alice:example.org").is_some());

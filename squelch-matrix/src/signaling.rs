@@ -39,20 +39,11 @@ pub struct IceCandidate {
 #[derive(Debug, Clone)]
 pub enum SignalingEvent {
     /// Remote peer is offering a WebRTC connection.
-    SdpOffer {
-        from: String,
-        payload: SdpMessage,
-    },
+    SdpOffer { from: String, payload: SdpMessage },
     /// Remote peer answered our offer.
-    SdpAnswer {
-        from: String,
-        payload: SdpMessage,
-    },
+    SdpAnswer { from: String, payload: SdpMessage },
     /// Remote peer sent an ICE candidate.
-    IceCandidate {
-        from: String,
-        payload: IceCandidate,
-    },
+    IceCandidate { from: String, payload: IceCandidate },
 }
 
 #[cfg(test)]
@@ -81,7 +72,10 @@ mod tests {
             sdp_m_line_index: None,
         };
         let json = serde_json::to_string(&ice).unwrap();
-        assert!(!json.contains("sdp_m_line_index"), "None field should be omitted");
+        assert!(
+            !json.contains("sdp_m_line_index"),
+            "None field should be omitted"
+        );
     }
 
     #[test]

@@ -23,7 +23,7 @@ pub enum Role {
 /// A single squad member.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Member {
-    pub id:   MemberId,
+    pub id: MemberId,
     pub role: Role,
 }
 
@@ -31,20 +31,26 @@ pub struct Member {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Squad {
     pub members: Vec<Member>,
-    pub duos:    Vec<Duo>,
+    pub duos: Vec<Duo>,
 }
 
 impl Squad {
     /// Returns true if the given member is a leader.
     pub fn is_leader(&self, id: &str) -> bool {
-        self.members.iter().any(|m| m.id == id && m.role == Role::Leader)
+        self.members
+            .iter()
+            .any(|m| m.id == id && m.role == Role::Leader)
     }
 
     /// Returns the duo partner of a member, if any.
     pub fn duo_partner<'a>(&'a self, id: &str) -> Option<&'a MemberId> {
         for duo in &self.duos {
-            if duo.members[0] == id { return Some(&duo.members[1]); }
-            if duo.members[1] == id { return Some(&duo.members[0]); }
+            if duo.members[0] == id {
+                return Some(&duo.members[1]);
+            }
+            if duo.members[1] == id {
+                return Some(&duo.members[0]);
+            }
         }
         None
     }
@@ -52,11 +58,20 @@ impl Squad {
     /// Transfer leadership from one member to another.
     /// Returns false if `from` is not currently a leader.
     pub fn transfer_leadership(&mut self, from: &str, to: &str) -> bool {
-        let is_leader = self.members.iter().any(|m| m.id == from && m.role == Role::Leader);
-        if !is_leader { return false; }
+        let is_leader = self
+            .members
+            .iter()
+            .any(|m| m.id == from && m.role == Role::Leader);
+        if !is_leader {
+            return false;
+        }
         for m in &mut self.members {
-            if m.id == from { m.role = Role::Member; }
-            if m.id == to   { m.role = Role::Leader; }
+            if m.id == from {
+                m.role = Role::Member;
+            }
+            if m.id == to {
+                m.role = Role::Leader;
+            }
         }
         true
     }
@@ -69,14 +84,30 @@ mod tests {
     fn make_squad() -> Squad {
         Squad {
             members: vec![
-                Member { id: "alice".into(), role: Role::Leader },
-                Member { id: "bob".into(),   role: Role::Member },
-                Member { id: "carol".into(), role: Role::Leader },
-                Member { id: "dave".into(),  role: Role::Member },
+                Member {
+                    id: "alice".into(),
+                    role: Role::Leader,
+                },
+                Member {
+                    id: "bob".into(),
+                    role: Role::Member,
+                },
+                Member {
+                    id: "carol".into(),
+                    role: Role::Leader,
+                },
+                Member {
+                    id: "dave".into(),
+                    role: Role::Member,
+                },
             ],
             duos: vec![
-                Duo { members: ["alice".into(), "bob".into()] },
-                Duo { members: ["carol".into(), "dave".into()] },
+                Duo {
+                    members: ["alice".into(), "bob".into()],
+                },
+                Duo {
+                    members: ["carol".into(), "dave".into()],
+                },
             ],
         }
     }
@@ -94,7 +125,7 @@ mod tests {
     fn duo_partner() {
         let s = make_squad();
         assert_eq!(s.duo_partner("alice"), Some(&"bob".to_owned()));
-        assert_eq!(s.duo_partner("bob"),   Some(&"alice".to_owned()));
+        assert_eq!(s.duo_partner("bob"), Some(&"alice".to_owned()));
         assert_eq!(s.duo_partner("carol"), Some(&"dave".to_owned()));
     }
 
