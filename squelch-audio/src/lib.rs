@@ -23,5 +23,5 @@ pub mod pipeline;
 pub mod ptt;
 
 pub use error::AudioError;
-pub use pipeline::{AudioConfig, AudioHandles, AudioPipeline, OPUS_FRAME_SAMPLES};
+pub use pipeline::{AudioConfig, AudioHandles, AudioPipeline, OPUS_FRAME_SAMPLES, resample_linear};
 pub use ptt::PttState;

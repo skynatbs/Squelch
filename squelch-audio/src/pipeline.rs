@@ -37,6 +37,9 @@ use crate::{error::AudioError, ptt::PttState};
 pub const OPUS_FRAME_SAMPLES: usize = 960;
 /// Opus target bitrate in bps (24kbps — good quality for voice).
 const OPUS_BITRATE: opus::Bitrate = opus::Bitrate::Bits(24_000);
+/// Opus requires one of: 8000, 12000, 16000, 24000, 48000 Hz.
+/// We always encode at 48kHz and resample from the device rate if needed.
+const OPUS_SAMPLE_RATE: u32 = 48_000;
 /// Pre-fill latency in milliseconds — prevents output starvation at startup.
 const LATENCY_MS: f32 = 100.0;
 
@@ -149,16 +152,27 @@ impl AudioPipeline {
             tx
         };
 
-        // ── Opus encoder — mono, 48kHz ────────────────────────────────────
-        // We create one encoder per channel (duo + leader). They run on the
-        // input callback thread (single-threaded, no Mutex needed).
-        let mut duo_encoder =
-            opus::Encoder::new(sample_rate, opus::Channels::Mono, opus::Application::Voip)?;
+        // ── Opus encoder — always at 48kHz mono ──────────────────────────
+        // If the device runs at a different rate (e.g. 44100Hz), PCM frames
+        // are linearly resampled to 48kHz before encoding.
+        let mut duo_encoder = opus::Encoder::new(
+            OPUS_SAMPLE_RATE,
+            opus::Channels::Mono,
+            opus::Application::Voip,
+        )?;
         duo_encoder.set_bitrate(OPUS_BITRATE)?;
 
-        let mut leader_encoder =
-            opus::Encoder::new(sample_rate, opus::Channels::Mono, opus::Application::Voip)?;
+        let mut leader_encoder = opus::Encoder::new(
+            OPUS_SAMPLE_RATE,
+            opus::Channels::Mono,
+            opus::Application::Voip,
+        )?;
         leader_encoder.set_bitrate(OPUS_BITRATE)?;
+
+        // Resample ratio: device_rate → 48kHz
+        let resample_ratio = OPUS_SAMPLE_RATE as f64 / sample_rate as f64;
+        // Adjusted frame size at the device sample rate (before resampling)
+        let device_frame_samples = (OPUS_FRAME_SAMPLES as f64 / resample_ratio).ceil() as usize;
 
         let ptt = cfg.ptt.clone();
 
@@ -171,7 +185,7 @@ impl AudioPipeline {
         let input_fn = move |data: &[f32], _: &cpal::InputCallbackInfo| {
             let ptt_on = ptt.0.load(Ordering::Relaxed);
 
-            // Downmix stereo → mono if necessary (average channels)
+            // Downmix stereo → mono (average channels)
             let mono: Vec<f32> = if channels == 1 {
                 data.to_vec()
             } else {
@@ -185,9 +199,10 @@ impl AudioPipeline {
                 leader_pcm_buf.extend_from_slice(&mono);
             }
 
-            // Encode full Opus frames (960 samples each)
-            while duo_pcm_buf.len() >= OPUS_FRAME_SAMPLES {
-                let frame: Vec<f32> = duo_pcm_buf.drain(..OPUS_FRAME_SAMPLES).collect();
+            // Encode when we have enough device-rate samples for one Opus frame
+            while duo_pcm_buf.len() >= device_frame_samples {
+                let frame_dev: Vec<f32> = duo_pcm_buf.drain(..device_frame_samples).collect();
+                let frame = resample_linear(&frame_dev, OPUS_FRAME_SAMPLES);
                 match duo_encoder.encode_float(&frame, &mut opus_out_buf) {
                     Ok(n) => {
                         let _ = duo_opus_tx.try_send(opus_out_buf[..n].to_vec());
@@ -196,8 +211,9 @@ impl AudioPipeline {
                 }
             }
 
-            while ptt_on && leader_pcm_buf.len() >= OPUS_FRAME_SAMPLES {
-                let frame: Vec<f32> = leader_pcm_buf.drain(..OPUS_FRAME_SAMPLES).collect();
+            while ptt_on && leader_pcm_buf.len() >= device_frame_samples {
+                let frame_dev: Vec<f32> = leader_pcm_buf.drain(..device_frame_samples).collect();
+                let frame = resample_linear(&frame_dev, OPUS_FRAME_SAMPLES);
                 match leader_encoder.encode_float(&frame, &mut opus_out_buf) {
                     Ok(n) => {
                         let _ = leader_opus_tx.try_send(opus_out_buf[..n].to_vec());
@@ -206,7 +222,6 @@ impl AudioPipeline {
                 }
             }
 
-            // If PTT turned off, discard accumulated leader PCM
             if !ptt_on {
                 leader_pcm_buf.clear();
             }
@@ -230,7 +245,7 @@ impl AudioPipeline {
 
             // Grow decoder pool if new peers were added
             while decoders.len() < receivers.len() {
-                match opus::Decoder::new(sample_rate, opus::Channels::Mono) {
+                match opus::Decoder::new(OPUS_SAMPLE_RATE, opus::Channels::Mono) {
                     Ok(d) => decoders.push(d),
                     Err(e) => {
                         warn!("failed to create opus decoder: {e}");
@@ -312,7 +327,28 @@ impl AudioPipeline {
     }
 }
 
-// ── Codec helpers (used by squelch-webrtc TODO items) ─────────────────────
+// ── Resampling ──────────────────────────────────────────────────────────────
+
+/// Linear resampler: converts `input` to exactly `target_len` samples.
+///
+/// Quality is sufficient for voice; a proper resampler (rubato etc.) is post-MVP.
+pub fn resample_linear(input: &[f32], target_len: usize) -> Vec<f32> {
+    if input.len() == target_len {
+        return input.to_vec();
+    }
+    let mut out = Vec::with_capacity(target_len);
+    let ratio = (input.len() - 1) as f64 / (target_len - 1).max(1) as f64;
+    for i in 0..target_len {
+        let pos = i as f64 * ratio;
+        let lo = pos.floor() as usize;
+        let hi = (lo + 1).min(input.len() - 1);
+        let t = pos - lo as f64;
+        out.push(input[lo] * (1.0 - t as f32) + input[hi] * t as f32);
+    }
+    out
+}
+
+// ── Codec helpers ───────────────────────────────────────────────────────────
 
 /// Encode a mono f32 PCM frame (exactly `OPUS_FRAME_SAMPLES` samples) to Opus.
 ///

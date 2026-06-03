@@ -31,7 +31,11 @@ fn main() -> Result<()> {
     let ptt = squelch_audio::PttState::new();
 
     // ── Hotkey manager (must be on main thread on some platforms) ─────────
-    let _hotkey_manager = hotkey::HotkeyManager::new(ptt.clone(), cfg.ptt_key.as_deref())?;
+    // Non-fatal: if the hotkey is already registered (e.g. another instance
+    // is running), log a warning and continue without PTT hotkey support.
+    let _hotkey_manager = hotkey::HotkeyManager::new(ptt.clone(), cfg.ptt_key.as_deref())
+        .map_err(|e| tracing::warn!("PTT hotkey not available: {e}"))
+        .ok();
 
     // ── Backend task ──────────────────────────────────────────────────────
     let backend = backend::Backend::spawn(ptt.clone(), cfg.clone(), rt.handle().clone());
