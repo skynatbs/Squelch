@@ -33,7 +33,7 @@ opus    = "0.3"
 str0m = "0.20"
 
 # Matrix
-matrix-sdk = { version = "0.18", default-features = false, features = ["experimental-send-custom-to-device", "sqlite"] }
+matrix-sdk = { version = "0.18", default-features = false, features = ["experimental-send-custom-to-device", "bundled-sqlite"] }
 matrix-sdk-common = "0.18"
 ruma = { version = "0.16", features = ["client-api-c"] }
 
